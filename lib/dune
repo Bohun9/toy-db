@@ -1,0 +1,10 @@
+(library
+ (name toydb)
+ (preprocess (pps ppx_deriving.show))
+ (flags (:standard -w -26-27-32-37-69))
+ )
+
+(ocamllex lexer)
+(menhir
+  (modules parser)
+  (flags --explain))

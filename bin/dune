@@ -1,0 +1,4 @@
+(executable
+ (public_name toydb)
+ (name main)
+ (libraries toydb))
