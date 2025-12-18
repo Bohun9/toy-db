@@ -47,4 +47,11 @@ let get_table_desc cat name =
   M.get_desc f
 ;;
 
+let begin_new_transaction cat =
+  let tid = Transaction.fresh_tid () in
+  Buffer_pool.begin_transaction cat.buf_pool tid;
+  tid
+;;
+
+let commit_transaction cat tid = Buffer_pool.commit_transaction cat.buf_pool tid
 let sync_to_disk cat = Buffer_pool.flush_all_pages cat.buf_pool

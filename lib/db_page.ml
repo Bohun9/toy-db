@@ -6,6 +6,12 @@ type page_key =
       ; page_no : int
       }
 
+module PageKeySet = Set.Make (struct
+    type t = page_key
+
+    let compare = compare
+  end)
+
 let is_dirty = function
   | DB_HeapPage hf -> Heap_page.is_dirty hf
 ;;

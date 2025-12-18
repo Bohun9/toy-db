@@ -3,7 +3,7 @@ open Printf
 
 let cat = Api.create_catalog "." 128
 
-let rec loop () =
+let rec loop tid =
   printf "=> ";
   flush stdout;
   match String.trim (read_line ()) with
@@ -23,7 +23,7 @@ let rec loop () =
         | e -> printf "Error: %s\n" (Printexc.to_string e))
      | sql_query ->
        (try
-          match Api.execute_sql sql_query cat with
+          match Api.execute_sql sql_query cat tid with
           | Api.Stream s ->
             Seq.iter (fun tuple -> printf "%s\n" (Tuple.show_tuple tuple)) s
           | Api.Nothing -> ()
@@ -34,13 +34,17 @@ let rec loop () =
              printf "Parse error at (%d,%d): unexpected token '%s'\n" line col tok
            | Error.Table_not_found -> printf "Table not found\n"
            | Error.Table_already_exists -> printf "Table already exists\n"
-           | Error.Type_mismatch -> printf "Type mismatch\n")
+           | Error.Type_mismatch -> printf "Type mismatch\n"
+           | Error.Buffer_pool_overflow -> printf "Buffer pool overflow"
+           | Error.Deadlock_victim -> printf "Deadlock victim\n")
         | e -> printf "Error: %s\n" (Printexc.to_string e)));
-    loop ()
+    loop tid
 ;;
 
 let () =
   printf "Welcome to toy-db.\n";
-  loop ();
-  Catalog.sync_to_disk cat
+  let tid = Catalog.begin_new_transaction cat in
+  loop tid;
+  Catalog.commit_transaction cat tid
 ;;
+(* Catalog.sync_to_disk cat *)

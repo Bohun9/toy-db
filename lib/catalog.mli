@@ -9,4 +9,6 @@ val get_table : t -> string -> packed_dbfile
 val process_ddl_query : t -> Syntax.ddl -> unit
 val get_table_names : t -> string list
 val get_table_desc : t -> string -> Tuple.tuple_descriptor
+val begin_new_transaction : t -> Transaction.tran_id
+val commit_transaction : t -> Transaction.tran_id -> unit
 val sync_to_disk : t -> unit

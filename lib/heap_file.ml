@@ -6,11 +6,6 @@ type t =
   ; buf_pool : Buffer_pool.t
   }
 
-let create file desc buf_pool =
-  In_channel.with_open_gen [ In_channel.Open_creat ] 0o666 file (fun _ -> ());
-  { file; desc; buf_pool }
-;;
-
 let get_desc hf = hf.desc
 let page_key hf page_no = Db_page.PageKey { file = hf.file; page_no }
 
@@ -41,18 +36,6 @@ let flush_page hf dbp =
   | Db_page.DB_HeapPage hp -> flush_heap_page hf hp
 ;;
 
-let get_page hf page_no =
-  let page =
-    Buffer_pool.get_page
-      hf.buf_pool
-      (page_key hf page_no)
-      (fun () -> load_page hf page_no)
-      (flush_page hf)
-  in
-  match page with
-  | DB_HeapPage hp -> hp
-;;
-
 let num_pages hf =
   let ic = In_channel.open_bin hf.file in
   let len = Int64.to_int (In_channel.length ic) in
@@ -61,17 +44,58 @@ let num_pages hf =
   len / Heap_page.page_size
 ;;
 
+(* Handle phantom-read case where the writing transaction adds a new page.
+   This ensures there are no data races when the file has no pages, as the
+   later transactions will always block on the first page. *)
+let ensure_at_least_one_page hf =
+  if num_pages hf = 0
+  then (
+    let hp = Heap_page.create 0 hf.desc in
+    flush_heap_page hf hp)
+;;
+
+let create file desc buf_pool =
+  In_channel.with_open_gen [ In_channel.Open_creat ] 0o666 file (fun _ -> ());
+  let hf = { file; desc; buf_pool } in
+  ensure_at_least_one_page hf;
+  hf
+;;
+
+let get_page hf page_no tid perm =
+  let page =
+    Buffer_pool.get_page
+      hf.buf_pool
+      (page_key hf page_no)
+      tid
+      perm
+      (fun () -> load_page hf page_no)
+      (flush_page hf)
+  in
+  match page with
+  | DB_HeapPage hp -> hp
+;;
+
 let check_tuple_type hf (Tuple.Tuple { desc; _ }) =
   if not (Tuple.match_desc hf.desc desc)
   then raise (Error.DBError Error.Type_mismatch)
   else ()
 ;;
 
-let insert_tuple hf t =
+(* The number of pages may increase during iteration in
+   [insert_tuple] and [scan_file], so this function is required. *)
+let seq_dynamic_init size_fn f =
+  let rec iter i () = if i == size_fn () then Seq.Nil else Seq.Cons (f i, iter (i + 1)) in
+  iter 0
+;;
+
+let insert_tuple hf t tid =
   check_tuple_type hf t;
-  let pages = Seq.init (num_pages hf) Fun.id in
+  let pages = seq_dynamic_init (fun () -> num_pages hf) Fun.id in
   match
-    Seq.find (fun page_no -> Heap_page.insert_tuple (get_page hf page_no) t) pages
+    Seq.find
+      (fun page_no ->
+        Heap_page.insert_tuple (get_page hf page_no tid Lock_manager.WritePerm) t)
+      pages
   with
   | Some _ -> ()
   | None ->
@@ -80,15 +104,16 @@ let insert_tuple hf t =
     flush_heap_page hf new_page
 ;;
 
-let delete_tuple hf = function
+let delete_tuple hf rid tid =
+  match rid with
   | Some (Tuple.RecordID { page_no; _ } as rid) ->
-    let page = get_page hf page_no in
+    let page = get_page hf page_no tid Lock_manager.WritePerm in
     Heap_page.delete_tuple page rid
   | None -> failwith "internal error"
 ;;
 
-let scan_file hf =
-  List.init (num_pages hf) Fun.id
-  |> List.to_seq
-  |> Seq.flat_map (fun page_no -> Heap_page.scan_page (get_page hf page_no))
+let scan_file hf tid =
+  seq_dynamic_init (fun () -> num_pages hf) Fun.id
+  |> Seq.flat_map (fun page_no ->
+    Heap_page.scan_page (get_page hf page_no tid Lock_manager.ReadPerm))
 ;;

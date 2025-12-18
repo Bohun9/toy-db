@@ -87,19 +87,19 @@ let make_plan cat stmt =
 (*    let alias = Option.value alias ~default:name in *)
 (*    SeqScan { file = Catalog.get_table cat name; alias }) *)
 
-let rec execute_plan = function
+let rec execute_plan tid = function
   | SeqScan { file; alias } ->
     let (Catalog.PackedDBFile (m, f)) = file in
     let module M = (val m) in
-    Seq.map (Tuple.set_tuple_alias alias) (M.scan_file f)
+    Seq.map (Tuple.set_tuple_alias alias) (M.scan_file f tid)
   | Insert { file; child } ->
     let (Catalog.PackedDBFile (m, f)) = file in
     let module M = (val m) in
-    Seq.iter (fun t -> M.insert_tuple f t) (execute_plan child);
+    Seq.iter (fun t -> M.insert_tuple f t tid) (execute_plan tid child);
     Seq.empty
   | Const { tuples } -> List.to_seq tuples
   | Filter { pred; child } ->
-    Seq.filter (fun t -> eval_expr pred t = Tuple.VBool true) (execute_plan child)
+    Seq.filter (fun t -> eval_expr pred t = Tuple.VBool true) (execute_plan tid child)
   | Join { e1; e2; child1; child2 } ->
     fun () ->
       let groups = Hashtbl.create 16 in
@@ -112,13 +112,13 @@ let rec execute_plan = function
             | None -> [ t1 ]
           in
           Hashtbl.replace groups v1 new_group)
-        (execute_plan child1);
+        (execute_plan tid child1);
       Seq.flat_map
         (fun t2 ->
           let v2 = eval_expr e2 t2 in
           match Hashtbl.find_opt groups v2 with
           | Some group -> List.to_seq (List.map (Fun.flip Tuple.combine_tuple t2) group)
           | None -> Seq.empty)
-        (execute_plan child2)
+        (execute_plan tid child2)
         ()
 ;;

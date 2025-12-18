@@ -1,6 +1,7 @@
 (library
  (name toydb)
  (preprocess (pps ppx_deriving.show))
+ (libraries unix ocamlgraph)
  (flags (:standard -w -26-27-32-37-69))
  )
 

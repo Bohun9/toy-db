@@ -4,11 +4,63 @@ type page_info =
   }
 
 type t =
-  { cache : (Db_page.page_key, page_info) Hashtbl.t
+  { cache_mutex : Mutex.t
+  ; cache : (Db_page.page_key, page_info) Hashtbl.t
   ; max_pages : int
+  ; lock_manager : Lock_manager.lock_manager
   }
 
-let create max_pages = { cache = Hashtbl.create max_pages; max_pages }
+let create max_pages lock_manager =
+  { cache_mutex = Mutex.create ()
+  ; cache = Hashtbl.create max_pages
+  ; max_pages
+  ; lock_manager
+  }
+;;
+
+let flush_commited_changes bp tid =
+  List.iter
+    (fun page_key ->
+      match Hashtbl.find_opt bp.cache page_key with
+      | Some pinfo when Db_page.is_dirty pinfo.page -> pinfo.flush_page pinfo.page
+      | _ -> ())
+    (Lock_manager.get_locked_pages_list bp.lock_manager tid)
+;;
+
+let discard_aborted_changes bp tid =
+  List.iter
+    (fun page_key ->
+      match Hashtbl.find_opt bp.cache page_key with
+      | Some pinfo when Db_page.is_dirty pinfo.page -> Hashtbl.remove bp.cache page_key
+      | _ -> ())
+    (Lock_manager.get_locked_pages_list bp.lock_manager tid)
+;;
+
+let begin_transaction bp tid = Lock_manager.begin_transaction bp.lock_manager tid
+
+let commit_transaction bp tid =
+  Lock_manager.protect bp.lock_manager (fun () ->
+    Mutex.protect bp.cache_mutex (fun () -> flush_commited_changes bp tid);
+    Lock_manager.relase_locks bp.lock_manager tid)
+;;
+
+let abort_transaction_locked bp tid () =
+  Mutex.protect bp.cache_mutex (fun () -> discard_aborted_changes bp tid);
+  Lock_manager.relase_locks bp.lock_manager tid
+;;
+
+let abort_transaction bp tid =
+  Lock_manager.protect bp.lock_manager (abort_transaction_locked bp tid)
+;;
+
+let acquire_lock bp page tid perm =
+  Lock_manager.acquire_lock
+    bp.lock_manager
+    page
+    tid
+    perm
+    (abort_transaction_locked bp tid)
+;;
 
 let flush_all_pages bp =
   Hashtbl.iter
@@ -17,20 +69,24 @@ let flush_all_pages bp =
 ;;
 
 let evict bp =
-  let k = Hashtbl.fold (fun k _ _ -> Some k) bp.cache None in
-  match k with
-  | Some k -> Hashtbl.remove bp.cache k
-  | None -> failwith "internal error"
+  match
+    Hashtbl.to_seq bp.cache
+    |> Seq.find (fun (_, pinfo) -> not (Db_page.is_dirty pinfo.page))
+  with
+  | Some (pk, _) -> Hashtbl.remove bp.cache pk
+  | None -> raise (Error.DBError Error.Buffer_pool_overflow)
 ;;
 
 let make_space bp = if Hashtbl.length bp.cache == bp.max_pages then evict bp else ()
 
-let get_page bp k load_page flush_page =
-  match Hashtbl.find_opt bp.cache k with
-  | Some pi -> pi.page
-  | None ->
-    make_space bp;
-    let page = load_page () in
-    Hashtbl.add bp.cache k { page; flush_page };
-    page
+let get_page bp pk tid perm load_page flush_page =
+  acquire_lock bp pk tid perm;
+  Mutex.protect bp.cache_mutex (fun () ->
+    match Hashtbl.find_opt bp.cache pk with
+    | Some pinfo -> pinfo.page
+    | None ->
+      make_space bp;
+      let page = load_page () in
+      Hashtbl.add bp.cache pk { page; flush_page };
+      page)
 ;;
