@@ -7,7 +7,8 @@ open Syntax
 
 %token EOF
 %token <string> ID
-%token <int> NUM
+%token <int> INT_LIT
+%token <string> STRING_LIT
 
 %token SELECT FROM WHERE JOIN ON CREATE TABLE INSERT INTO VALUES
 %token INT STRING
@@ -23,7 +24,8 @@ field_name
   | ID DOT ID { QualifiedFieldName { alias = $1; column = $3 } }
 
 value 
-  : NUM { VInt $1 }
+  : INT_LIT    { VInt $1 }
+  | STRING_LIT { VString $1 }
 
 tuple
   : LPAREN separated_list(COMMA, value) RPAREN { $2 }

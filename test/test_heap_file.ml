@@ -13,7 +13,7 @@ let show_tuple = Tuple.show_tuple
 let with_temp_heap_file f =
   let lm = Lock_manager.create () in
   let buf_pool = Buffer_pool.create 1 lm in
-  let tid = Transaction.fresh_tid () in
+  let tid = Transaction_id.fresh_tid () in
   Buffer_pool.begin_transaction buf_pool tid;
   let temp_file = Filename.temp_file "heap_file_test_" ".db" in
   try

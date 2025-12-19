@@ -1,13 +1,13 @@
 type page_info =
-  { page : Db_page.db_page
-  ; flush_page : Db_page.db_page -> unit
+  { page : Db_page.t
+  ; flush_page : Db_page.t -> unit
   }
 
 type t =
   { cache_mutex : Mutex.t
-  ; cache : (Db_page.page_key, page_info) Hashtbl.t
+  ; cache : (Page_key.t, page_info) Hashtbl.t
   ; max_pages : int
-  ; lock_manager : Lock_manager.lock_manager
+  ; lock_manager : Lock_manager.t
   }
 
 let create max_pages lock_manager =
@@ -41,12 +41,12 @@ let begin_transaction bp tid = Lock_manager.begin_transaction bp.lock_manager ti
 let commit_transaction bp tid =
   Lock_manager.protect bp.lock_manager (fun () ->
     Mutex.protect bp.cache_mutex (fun () -> flush_commited_changes bp tid);
-    Lock_manager.relase_locks bp.lock_manager tid)
+    Lock_manager.release_locks bp.lock_manager tid)
 ;;
 
 let abort_transaction_locked bp tid () =
   Mutex.protect bp.cache_mutex (fun () -> discard_aborted_changes bp tid);
-  Lock_manager.relase_locks bp.lock_manager tid
+  Lock_manager.release_locks bp.lock_manager tid
 ;;
 
 let abort_transaction bp tid =
@@ -77,7 +77,7 @@ let evict bp =
   | None -> raise (Error.DBError Error.Buffer_pool_overflow)
 ;;
 
-let make_space bp = if Hashtbl.length bp.cache == bp.max_pages then evict bp else ()
+let make_space bp = if Hashtbl.length bp.cache = bp.max_pages then evict bp else ()
 
 let get_page bp pk tid perm load_page flush_page =
   acquire_lock bp pk tid perm;

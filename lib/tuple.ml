@@ -29,6 +29,8 @@ type field_metadata =
       }
 [@@deriving show]
 
+let field_metadata name typ = FieldMetadata { name = Syntax.PureFieldName name; typ }
+
 type tuple_descriptor = field_metadata list [@@deriving show]
 
 type value =
@@ -36,6 +38,16 @@ type value =
   | VBool of bool
   | VString of string
 [@@deriving show]
+
+let value_to_int = function
+  | VInt n -> n
+  | _ -> failwith "internal error - value_to_int"
+;;
+
+let value_to_string = function
+  | VString s -> s
+  | _ -> failwith "internal error -  value_to_string"
+;;
 
 type tuple =
   | Tuple of
@@ -72,6 +84,7 @@ let set_desc_alias desc alias =
 ;;
 
 let set_tuple_alias alias (Tuple t) = Tuple { t with desc = set_desc_alias t.desc alias }
+let set_tuple_desc (Tuple t) desc = Tuple { t with desc }
 
 let combine_tuple (Tuple t1) (Tuple t2) =
   Tuple { desc = t1.desc @ t2.desc; values = t1.values @ t2.values; rid = None }

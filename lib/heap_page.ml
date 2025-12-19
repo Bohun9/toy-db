@@ -15,7 +15,7 @@ let value_storage_size vt =
   match vt with
   | Tuple.TInt -> Tuple.int_size
   | Tuple.TString -> Tuple.string_max_length
-  | Tuple.TBool -> failwith "internal error"
+  | Tuple.TBool -> failwith "internal error - value_storage_size"
 ;;
 
 let tuple_storage_size desc =
@@ -46,7 +46,7 @@ let serialize_value b = function
     assert (String.length s <= Tuple.string_max_length);
     let padded = s ^ String.make (Tuple.string_max_length - String.length s) '\x00' in
     Buffer.add_string b padded
-  | Tuple.VBool _ -> failwith "internal error"
+  | Tuple.VBool _ -> failwith "internal error - serialize_value"
 ;;
 
 let serialize_tuple b (Tuple.Tuple t) = List.iter (serialize_value b) t.values
@@ -70,7 +70,7 @@ let deserialize_value c vt =
       | None -> raw
     in
     Tuple.VString s
-  | Tuple.TBool -> failwith "internal error"
+  | Tuple.TBool -> failwith "internal error - deserialize_value"
 ;;
 
 let deserialize_values c desc =
@@ -111,7 +111,7 @@ let delete_tuple (HeapPage hp) (Tuple.RecordID rid) =
     hp.slots.(rid.slot_idx) <- None;
     hp.num_tuples <- hp.num_tuples - 1;
     set_dirty (HeapPage hp)
-  | None -> failwith "internal error"
+  | None -> failwith "internal error - delete_tuple"
 ;;
 
 let scan_page (HeapPage hp) = hp.slots |> Array.to_seq |> Seq.filter_map Fun.id

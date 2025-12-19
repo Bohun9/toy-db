@@ -13,7 +13,7 @@ let rec trans_expr (e : Syntax.expr) =
 let get_field_index desc fn =
   match List.find_index (fun (Tuple.FieldMetadata { name; _ }) -> name = fn) desc with
   | Some i -> i
-  | None -> failwith "internal error"
+  | None -> failwith "internal error - get_field_index"
 ;;
 
 let rec eval_expr e (Tuple.Tuple { desc; values; _ } as t) =
@@ -35,11 +35,11 @@ let rec eval_expr e (Tuple.Tuple { desc; values; _ } as t) =
 
 type physical_plan =
   | SeqScan of
-      { file : Catalog.packed_dbfile
+      { file : Table_registry.packed_dbfile
       ; alias : string
       }
   | Insert of
-      { file : Catalog.packed_dbfile
+      { file : Table_registry.packed_dbfile
       ; child : physical_plan
       }
   | Const of { tuples : Tuple.tuple list }
@@ -57,7 +57,7 @@ type physical_plan =
 let rec make_plan_table_expr cat = function
   | Syntax.Table { name; alias } ->
     let alias = Option.value alias ~default:name in
-    SeqScan { file = Catalog.get_table cat name; alias }
+    SeqScan { file = Table_registry.get_table cat name; alias }
   | Syntax.Join { tab1; tab2; e1; e2 } ->
     Join
       { e1 = trans_expr e1
@@ -77,7 +77,7 @@ let make_plan cat stmt =
     make_plan_table_expr cat table_expr |> make_plan_predicates predicates
   | Syntax.InsertValues { table; tuples } ->
     Insert
-      { file = Catalog.get_table cat table
+      { file = Table_registry.get_table cat table
       ; child = Const { tuples = List.map Tuple.trans_tuple tuples }
       }
 ;;
@@ -85,15 +85,16 @@ let make_plan cat stmt =
 (* (match exprs, table_expr with *)
 (*  | Syntax.Star, Syntax.Table { name; alias } -> *)
 (*    let alias = Option.value alias ~default:name in *)
-(*    SeqScan { file = Catalog.get_table cat name; alias }) *)
+(*    SeqScan { file = Table_registry.get_table cat name; alias }) *)
 
-let rec execute_plan tid = function
+let rec execute_plan tid pp =
+  match pp with
   | SeqScan { file; alias } ->
-    let (Catalog.PackedDBFile (m, f)) = file in
+    let (Table_registry.PackedDBFile (m, f)) = file in
     let module M = (val m) in
     Seq.map (Tuple.set_tuple_alias alias) (M.scan_file f tid)
   | Insert { file; child } ->
-    let (Catalog.PackedDBFile (m, f)) = file in
+    let (Table_registry.PackedDBFile (m, f)) = file in
     let module M = (val m) in
     Seq.iter (fun t -> M.insert_tuple f t tid) (execute_plan tid child);
     Seq.empty

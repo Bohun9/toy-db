@@ -37,13 +37,15 @@ let make_symbol s =
 
 let digit = ['0'-'9']
 let int = digit+
-let id = ['a'-'z' 'A'-'Z'] ['a'-'z' 'A'-'Z' '_' '0'-'9']*
+let id = ['a'-'z' 'A'-'Z' '_'] ['a'-'z' 'A'-'Z' '_' '0'-'9']*
 let symbol = ['*' '.' ',' '=' '(' ')'] | "<="
+let string = '"' [^ '"' '\n']* '"'
 
 rule token = parse
   | [' ' '\t']             { token lexbuf }
   | ['\n']                 { Lexing.new_line lexbuf; token lexbuf }
-  | int as i               { NUM (int_of_string i) }
+  | string as s            { STRING_LIT (String.sub s 1 (String.length s - 2)) }
+  | int as i               { INT_LIT (int_of_string i) }
   | id as id               { make_id id }
   | symbol as s            { make_symbol s }
   | eof                    { EOF }
