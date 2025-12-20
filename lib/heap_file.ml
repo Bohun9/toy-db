@@ -1,4 +1,4 @@
-type page = Heap_page.heap_page
+type page = Heap_page.t
 
 type t =
   { file : string
@@ -7,7 +7,9 @@ type t =
   ; num_pages : int Atomic.t
   }
 
-let get_desc hf = hf.desc
+let desc hf = hf.desc
+let num_pages hf = Atomic.get hf.num_pages
+let incr_num_pages hf = Atomic.incr hf.num_pages
 let page_key hf page_no = Page_key.PageKey { file = hf.file; page_no }
 
 let load_heap_page hf page_no =
@@ -23,8 +25,8 @@ let load_heap_page hf page_no =
 
 let load_page hf page_no = Db_page.DB_HeapPage (load_heap_page hf page_no)
 
-let flush_heap_page hf (Heap_page.HeapPage { page_no; _ } as hp) =
-  let offset = page_no * Heap_page.page_size in
+let flush_heap_page hf (hp : Heap_page.t) =
+  let offset = hp.page_no * Heap_page.page_size in
   Out_channel.with_open_bin hf.file (fun oc ->
     Out_channel.seek oc (Int64.of_int offset);
     Out_channel.output_bytes oc (Heap_page.serialize hp));
@@ -35,17 +37,6 @@ let flush_page hf dbp =
   match dbp with
   | Db_page.DB_HeapPage hp -> flush_heap_page hf hp
 ;;
-
-(* let num_pages hf = *)
-(*   let ic = In_channel.open_bin hf.file in *)
-(*   let len = Int64.to_int (In_channel.length ic) in *)
-(*   In_channel.close ic; *)
-(*   assert (len mod Heap_page.page_size = 0); *)
-(*   len / Heap_page.page_size *)
-(* ;; *)
-
-let num_pages hf = Atomic.get hf.num_pages
-let incr_num_pages hf = Atomic.incr hf.num_pages
 
 (* Handle phantom-read case where the writing transaction adds a new page.
    This ensures there are no data races when the file has no pages, as the
@@ -83,10 +74,8 @@ let get_page hf page_no tid perm =
   | DB_HeapPage hp -> hp
 ;;
 
-let check_tuple_type hf (Tuple.Tuple { desc; _ }) =
-  if not (Tuple.match_desc hf.desc desc)
-  then raise (Error.DBError Error.Type_mismatch)
-  else ()
+let check_tuple_type hf (t : Tuple.t) =
+  if not (Tuple.match_desc hf.desc t.desc) then raise Error.type_mismatch
 ;;
 
 (* The number of pages may increase during iteration in
@@ -96,7 +85,7 @@ let seq_dynamic_init size_fn f =
   iter 0
 ;;
 
-let insert_tuple hf t tid =
+let insert_tuple hf (t : Tuple.t) tid =
   check_tuple_type hf t;
   let t = Tuple.set_tuple_desc t hf.desc in
   let pages = seq_dynamic_init (fun () -> num_pages hf) Fun.id in

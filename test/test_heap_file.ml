@@ -19,7 +19,7 @@ let test_delete _ =
       Heap_file.insert_tuple hf (U.make_counter_tuple 1) tid;
       Heap_file.insert_tuple hf (U.make_counter_tuple 2) tid;
       let tuples = Heap_file.scan_file hf tid in
-      Seq.iter (fun (Tuple.Tuple t) -> Heap_file.delete_tuple hf t.rid tid) tuples;
+      Seq.iter (fun (t : Tuple.t) -> Heap_file.delete_tuple hf t.rid tid) tuples;
       let tuples = Heap_file.scan_file hf tid in
       U.assert_int_eq 0 (Seq.length tuples)))
 ;;

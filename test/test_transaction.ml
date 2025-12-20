@@ -6,7 +6,7 @@ module U = Test_utils
 (* Basic test for parallel transactions incrementing a counter in a heap file *)
 
 let read_counter hf tid =
-  let (Tuple t) = Heap_file.scan_file hf tid |> List.of_seq |> List.hd in
+  let t = Heap_file.scan_file hf tid |> List.of_seq |> List.hd in
   Tuple.value_to_int (List.hd t.values), t.rid
 ;;
 

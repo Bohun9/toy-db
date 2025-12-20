@@ -1,15 +1,18 @@
 let page_size = 4096
 let page_header_size = 2
 
-type heap_page =
-  | HeapPage of
-      { page_no : int
-      ; desc : Tuple.tuple_descriptor
-      ; slots : Tuple.tuple option array
-      ; mutable num_tuples : int
-      ; mutable dirty : bool
-      }
+type t =
+  { page_no : int
+  ; desc : Tuple.tuple_descriptor
+  ; slots : Tuple.t option array
+  ; mutable num_tuples : int
+  ; mutable dirty : bool
+  }
 [@@deriving show]
+
+let is_dirty hp = hp.dirty
+let set_dirty hp = hp.dirty <- true
+let clear_dirty hp = hp.dirty <- false
 
 let value_storage_size vt =
   match vt with
@@ -27,18 +30,13 @@ let tuple_storage_size desc =
 let num_slots desc = (page_size - page_header_size) / tuple_storage_size desc
 
 let create page_no desc =
-  HeapPage
-    { page_no
-    ; desc
-    ; slots = Array.make (num_slots desc) None
-    ; num_tuples = 0
-    ; dirty = false
-    }
+  { page_no
+  ; desc
+  ; slots = Array.make (num_slots desc) None
+  ; num_tuples = 0
+  ; dirty = false
+  }
 ;;
-
-let is_dirty (HeapPage hp) = hp.dirty
-let set_dirty (HeapPage hp) = hp.dirty <- true
-let clear_dirty (HeapPage hp) = hp.dirty <- false
 
 let serialize_value b = function
   | Tuple.VInt n -> Buffer.add_int64_le b (Int64.of_int n)
@@ -49,9 +47,9 @@ let serialize_value b = function
   | Tuple.VBool _ -> failwith "internal error - serialize_value"
 ;;
 
-let serialize_tuple b (Tuple.Tuple t) = List.iter (serialize_value b) t.values
+let serialize_tuple b (t : Tuple.t) = List.iter (serialize_value b) t.values
 
-let serialize (HeapPage hp) =
+let serialize hp =
   let b = Buffer.create page_size in
   Buffer.add_int16_le b hp.num_tuples;
   Array.iter (Option.iter (serialize_tuple b)) hp.slots;
@@ -80,38 +78,37 @@ let deserialize_values c desc =
 let deserialize page_no desc data =
   let c = Cursor.create data in
   let num_tuples = Cursor.read_int16_le c in
-  let deserialize_tuple slot_idx =
-    Tuple.Tuple
-      { desc
-      ; values = deserialize_values c desc
-      ; rid = Some (Tuple.RecordID { page_no; slot_idx })
-      }
+  let deserialize_tuple slot_idx : Tuple.t =
+    { desc
+    ; values = deserialize_values c desc
+    ; rid = Some (Tuple.RecordID { page_no; slot_idx })
+    }
   in
   let slots =
     Array.init (num_slots desc) (fun i ->
       if i < num_tuples then Some (deserialize_tuple i) else None)
   in
-  HeapPage { page_no; desc; slots; num_tuples; dirty = false }
+  { page_no; desc; slots; num_tuples; dirty = false }
 ;;
 
-let insert_tuple (HeapPage hp) (Tuple.Tuple t) =
+let insert_tuple hp t =
   match Array.find_index Option.is_none hp.slots with
   | None -> false
   | Some slot_idx ->
     let rid = Some (Tuple.RecordID { page_no = hp.page_no; slot_idx }) in
-    hp.slots.(slot_idx) <- Some (Tuple { t with rid });
+    hp.slots.(slot_idx) <- Some { t with rid };
     hp.num_tuples <- hp.num_tuples + 1;
-    set_dirty (HeapPage hp);
+    set_dirty hp;
     true
 ;;
 
-let delete_tuple (HeapPage hp) (Tuple.RecordID rid) =
+let delete_tuple hp (Tuple.RecordID rid) =
   match hp.slots.(rid.slot_idx) with
   | Some _ ->
     hp.slots.(rid.slot_idx) <- None;
     hp.num_tuples <- hp.num_tuples - 1;
-    set_dirty (HeapPage hp)
+    set_dirty hp
   | None -> failwith "internal error - delete_tuple"
 ;;
 
-let scan_page (HeapPage hp) = hp.slots |> Array.to_seq |> Seq.filter_map Fun.id
+let scan_page hp = hp.slots |> Array.to_seq |> Seq.filter_map Fun.id

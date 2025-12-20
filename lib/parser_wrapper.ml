@@ -6,5 +6,5 @@ let parse_sql s =
     let line = pos.pos_lnum in
     let col = pos.pos_cnum - pos.pos_bol in
     let tok = Lexing.lexeme lexbuf in
-    raise (Error.DBError (Error.Parser_error { line; col; tok }))
+    raise (Error.parser_error line col tok)
 ;;

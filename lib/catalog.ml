@@ -1,9 +1,6 @@
-(* type packed_dbfile = *)
-(*   | PackedDBFile : (module Db_file.DBFILE with type t = 't) * 't -> packed_dbfile *)
-(**)
 type t =
   { dir : string
-  ; buf_pool : Buffer_pool.t (* ; tables : (string, packed_dbfile) Hashtbl.t *)
+  ; buf_pool : Buffer_pool.t
   ; table_registry : Table_registry.t
   }
 
@@ -69,7 +66,7 @@ let with_tid cat f =
 ;;
 
 type query_result =
-  | Stream of Tuple.tuple Seq.t
+  | Stream of Tuple.t Seq.t
   | Nothing
 
 let execute_dml_query cat dml tid =
@@ -135,7 +132,7 @@ let get_table_names cat = Table_registry.get_table_names cat.table_registry
 let get_table_desc cat name =
   let (PackedDBFile (m, f)) = Table_registry.get_table cat.table_registry name in
   let module M = (val m) in
-  M.get_desc f
+  M.desc f
 ;;
 
 let sync_to_disk cat = Buffer_pool.flush_all_pages cat.buf_pool
@@ -163,7 +160,7 @@ let load_catalog_tables cat =
     | Stream tables ->
       tables
       |> List.of_seq
-      |> List.map (fun (Tuple.Tuple t) ->
+      |> List.map (fun (t : Tuple.t) ->
         match List.hd t.values with
         | Tuple.VString t -> t
         | _ -> failwith "internal error - load_catalog_tables")
@@ -178,7 +175,7 @@ let load_catalog_columns cat =
     | Stream columns ->
       columns
       |> List.of_seq
-      |> List.map (fun (Tuple.Tuple t) ->
+      |> List.map (fun (t : Tuple.t) ->
         ( List.nth t.values 0 |> Tuple.value_to_string
         , List.nth t.values 1 |> Tuple.value_to_string
         , List.nth t.values 2 |> Tuple.value_to_int |> (fun t -> TypeId t) |> from_type_id

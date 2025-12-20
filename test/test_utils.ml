@@ -2,16 +2,13 @@ open Toydb
 
 let counter_desc = [ Tuple.FieldMetadata { name = PureFieldName "counter"; typ = TInt } ]
 
-let make_counter_tuple n =
-  Tuple.Tuple { desc = counter_desc; values = [ VInt n ]; rid = None }
+let make_counter_tuple n : Tuple.t =
+  { desc = counter_desc; values = [ VInt n ]; rid = None }
 ;;
 
-let cmp_tuple (Tuple.Tuple t1) (Tuple.Tuple t2) =
-  t1.desc = t2.desc && t1.values = t2.values
-;;
-
+let cmp_tuple (t1 : Tuple.t) (t2 : Tuple.t) = t1.desc = t2.desc && t1.values = t2.values
 let assert_int_eq = OUnit2.assert_equal ~printer:string_of_int
-let assert_tuple_eq = OUnit2.assert_equal ~cmp:cmp_tuple ~printer:Tuple.show_tuple
+let assert_tuple_eq = OUnit2.assert_equal ~cmp:cmp_tuple ~printer:Tuple.show
 
 let with_temp_heap_file desc f =
   let lm = Lock_manager.create () in

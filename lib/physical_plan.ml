@@ -16,10 +16,10 @@ let get_field_index desc fn =
   | None -> failwith "internal error - get_field_index"
 ;;
 
-let rec eval_expr e (Tuple.Tuple { desc; values; _ } as t) =
+let rec eval_expr e (t : Tuple.t) =
   match e with
   | EValue v -> v
-  | EField fn -> List.nth values (get_field_index desc fn)
+  | EField fn -> List.nth t.values (get_field_index t.desc fn)
   | EBinop (e1, op, e2) ->
     let v1 = eval_expr e1 t in
     let v2 = eval_expr e2 t in
@@ -33,25 +33,25 @@ let rec eval_expr e (Tuple.Tuple { desc; values; _ } as t) =
         | _ -> raise (Error.DBError Error.Type_mismatch)))
 ;;
 
-type physical_plan =
+type t =
   | SeqScan of
       { file : Table_registry.packed_dbfile
       ; alias : string
       }
   | Insert of
       { file : Table_registry.packed_dbfile
-      ; child : physical_plan
+      ; child : t
       }
-  | Const of { tuples : Tuple.tuple list }
+  | Const of { tuples : Tuple.t list }
   | Filter of
       { pred : expr
-      ; child : physical_plan
+      ; child : t
       }
   | Join of
       { e1 : expr
       ; e2 : expr
-      ; child1 : physical_plan
-      ; child2 : physical_plan
+      ; child1 : t
+      ; child2 : t
       }
 
 let rec make_plan_table_expr cat = function
@@ -81,11 +81,6 @@ let make_plan cat stmt =
       ; child = Const { tuples = List.map Tuple.trans_tuple tuples }
       }
 ;;
-
-(* (match exprs, table_expr with *)
-(*  | Syntax.Star, Syntax.Table { name; alias } -> *)
-(*    let alias = Option.value alias ~default:name in *)
-(*    SeqScan { file = Table_registry.get_table cat name; alias }) *)
 
 let rec execute_plan tid pp =
   match pp with

@@ -4,7 +4,7 @@
 type t
 
 type query_result =
-  | Stream of Tuple.tuple Seq.t
+  | Stream of Tuple.t Seq.t
   | Nothing
 
 val create : string -> Buffer_pool.t -> t

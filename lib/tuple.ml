@@ -14,14 +14,6 @@ type value_type =
   | TString
 [@@deriving show]
 
-(* type field_name = *)
-(*   | QualifiedFieldName of *)
-(*       { alias : string *)
-(*       ; column : string *)
-(*       } *)
-(*   | PureFieldName of string *)
-(* [@@deriving show] *)
-
 type field_metadata =
   | FieldMetadata of
       { name : Syntax.field_name
@@ -49,15 +41,14 @@ let value_to_string = function
   | _ -> failwith "internal error -  value_to_string"
 ;;
 
-type tuple =
-  | Tuple of
-      { desc : tuple_descriptor
-      ; values : value list
-      ; rid : record_id option
-      }
+type t =
+  { desc : tuple_descriptor
+  ; values : value list
+  ; rid : record_id option
+  }
 [@@deriving show]
 
-type tuples = tuple list [@@deriving show]
+type tuples = t list [@@deriving show]
 
 let trans_column_type = function
   | Syntax.TInt -> TInt
@@ -83,11 +74,11 @@ let set_desc_alias desc alias =
     desc
 ;;
 
-let set_tuple_alias alias (Tuple t) = Tuple { t with desc = set_desc_alias t.desc alias }
-let set_tuple_desc (Tuple t) desc = Tuple { t with desc }
+let set_tuple_alias alias t = { t with desc = set_desc_alias t.desc alias }
+let set_tuple_desc t desc = { t with desc }
 
-let combine_tuple (Tuple t1) (Tuple t2) =
-  Tuple { desc = t1.desc @ t2.desc; values = t1.values @ t2.values; rid = None }
+let combine_tuple t1 t2 =
+  { desc = t1.desc @ t2.desc; values = t1.values @ t2.values; rid = None }
 ;;
 
 let derive_type = function
@@ -108,7 +99,7 @@ let trans_value (v : Syntax.value) =
 
 let trans_tuple vs =
   let values = List.map trans_value vs in
-  Tuple { desc = derive_desc values; values; rid = None }
+  { desc = derive_desc values; values; rid = None }
 ;;
 
 let extract_types desc = List.map (fun (FieldMetadata { typ; _ }) -> typ) desc
