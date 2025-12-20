@@ -1,11 +1,12 @@
 module PageKeySet = Set.Make (Page_key)
 module TransactionIdSet = Set.Make (Transaction_id)
-module TransactionIdGraph = Graph.Imperative.Digraph.Abstract (Transaction_id)
+module TransactionIdGraph = Graph.Imperative.Digraph.Concrete (Transaction_id)
 module TransactionIdGraphSCC = Graph.Components.Make (TransactionIdGraph)
 
 type permission =
   | ReadPerm
   | WritePerm
+[@@deriving show { with_path = false }]
 
 type page_lock =
   | SharedLock of int
@@ -124,14 +125,17 @@ let rec acquire_lock (LockManger lm) page tid perm abort_tran =
   Mutex.lock lm.lock_mutex;
   if try_acquire_lock (LockManger lm) page tid perm
   then (
+    Log.log_tid_page tid page "acquired lock with perm %s" (show_permission perm);
     unblock_tran (LockManger lm) page tid;
     Mutex.unlock lm.lock_mutex)
   else (
     if not (block_tran (LockManger lm) page tid)
     then (
+      Log.log_tid_page tid page "deadlock detected, aborting transaction";
       abort_tran ();
       Mutex.unlock lm.lock_mutex;
-      raise (Error.DBError Error.Deadlock_victim));
+      raise Error.deadlock_victim);
+    Log.log_tid_page tid page "blocked on lock with perm %s" (show_permission perm);
     Mutex.unlock lm.lock_mutex;
     Unix.sleepf 0.05;
     acquire_lock (LockManger lm) page tid perm abort_tran)

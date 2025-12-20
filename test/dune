@@ -1,4 +1,14 @@
+(library
+ (name test_utils)
+ (modules test_utils)
+ (libraries toydb ounit2))
+
 (test
  (name test_heap_file)
- (libraries toydb ounit2)
- )
+ (modules test_heap_file)
+ (libraries toydb ounit2 test_utils))
+
+(test
+ (name test_transaction)
+ (modules test_transaction)
+ (libraries toydb ounit2 domainslib test_utils))

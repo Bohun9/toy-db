@@ -4,6 +4,7 @@ type t =
   { file : string
   ; desc : Tuple.tuple_descriptor
   ; buf_pool : Buffer_pool.t
+  ; num_pages : int Atomic.t
   }
 
 let get_desc hf = hf.desc
@@ -35,13 +36,16 @@ let flush_page hf dbp =
   | Db_page.DB_HeapPage hp -> flush_heap_page hf hp
 ;;
 
-let num_pages hf =
-  let ic = In_channel.open_bin hf.file in
-  let len = Int64.to_int (In_channel.length ic) in
-  In_channel.close ic;
-  assert (len mod Heap_page.page_size = 0);
-  len / Heap_page.page_size
-;;
+(* let num_pages hf = *)
+(*   let ic = In_channel.open_bin hf.file in *)
+(*   let len = Int64.to_int (In_channel.length ic) in *)
+(*   In_channel.close ic; *)
+(*   assert (len mod Heap_page.page_size = 0); *)
+(*   len / Heap_page.page_size *)
+(* ;; *)
+
+let num_pages hf = Atomic.get hf.num_pages
+let incr_num_pages hf = Atomic.incr hf.num_pages
 
 (* Handle phantom-read case where the writing transaction adds a new page.
    This ensures there are no data races when the file has no pages, as the
@@ -54,8 +58,13 @@ let ensure_at_least_one_page hf =
 ;;
 
 let create file desc buf_pool =
-  In_channel.with_open_gen [ In_channel.Open_creat ] 0o666 file (fun _ -> ());
-  let hf = { file; desc; buf_pool } in
+  let len =
+    In_channel.with_open_gen [ In_channel.Open_creat ] 0o666 file (fun ic ->
+      Int64.to_int (In_channel.length ic))
+  in
+  assert (len mod Heap_page.page_size = 0);
+  let num_pages = len / Heap_page.page_size in
+  let hf = { file; desc; buf_pool; num_pages = Atomic.make num_pages } in
   ensure_at_least_one_page hf;
   hf
 ;;
@@ -100,6 +109,7 @@ let insert_tuple hf t tid =
   | Some _ -> ()
   | None ->
     let new_page = Heap_page.create (num_pages hf) hf.desc in
+    incr_num_pages hf;
     assert (Heap_page.insert_tuple new_page t);
     flush_heap_page hf new_page
 ;;

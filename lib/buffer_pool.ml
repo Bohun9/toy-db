@@ -44,6 +44,14 @@ let commit_transaction bp tid =
     Lock_manager.release_locks bp.lock_manager tid)
 ;;
 
+let with_tid bp f =
+  let tid = Transaction_id.fresh_tid () in
+  begin_transaction bp tid;
+  let r = f tid in
+  commit_transaction bp tid;
+  r
+;;
+
 let abort_transaction_locked bp tid () =
   Mutex.protect bp.cache_mutex (fun () -> discard_aborted_changes bp tid);
   Lock_manager.release_locks bp.lock_manager tid
