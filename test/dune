@@ -9,6 +9,11 @@
  (libraries toydb ounit2 test_utils))
 
 (test
+ (name test_btree_file)
+ (modules test_btree_file)
+ (libraries toydb ounit2 test_utils))
+
+(test
  (name test_transaction)
  (modules test_transaction)
  (libraries toydb ounit2 domainslib test_utils))

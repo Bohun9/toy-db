@@ -1,5 +1,13 @@
 open Toydb
 
+let rec shuffle = function
+  | [] -> []
+  | [ x ] -> [ x ]
+  | xs ->
+    let l, r = List.partition (fun _ -> Random.bool ()) xs in
+    List.rev_append (shuffle l) (shuffle r)
+;;
+
 let counter_desc = [ Tuple.FieldMetadata { name = PureFieldName "counter"; typ = TInt } ]
 
 let make_counter_tuple n : Tuple.t =
@@ -10,18 +18,36 @@ let cmp_tuple (t1 : Tuple.t) (t2 : Tuple.t) = t1.desc = t2.desc && t1.values = t
 let assert_int_eq = OUnit2.assert_equal ~printer:string_of_int
 let assert_tuple_eq = OUnit2.assert_equal ~cmp:cmp_tuple ~printer:Tuple.show
 
-let with_temp_heap_file desc f =
-  let lm = Lock_manager.create () in
-  let bp = Buffer_pool.create 1 lm in
-  let temp_file = Filename.temp_file "transaction_test_" ".db" in
-  let hf = Heap_file.create temp_file desc bp in
+let with_temp_file prefix sufix f =
+  let temp_file = Filename.temp_file prefix sufix in
   try
-    f hf bp;
-    Sys.remove temp_file
+    let r = f temp_file in
+    Sys.remove temp_file;
+    r
   with
   | e ->
     Sys.remove temp_file;
     raise e
+;;
+
+let create_buf_pool max_num_pages =
+  let lm = Lock_manager.create () in
+  let bp = Buffer_pool.create max_num_pages lm in
+  bp
+;;
+
+let with_temp_heap_file desc f =
+  with_temp_file "heap_file_test_" ".tbl" (fun temp_file ->
+    let bp = create_buf_pool 4 in
+    let hf = Heap_file.create temp_file desc bp in
+    f hf bp)
+;;
+
+let with_temp_btree_file desc key_field f =
+  with_temp_file "btree_file_test_" ".tbl" (fun temp_file ->
+    let bp = create_buf_pool 1000 in
+    let bt = Btree_file.create temp_file desc bp key_field in
+    f bt bp)
 ;;
 
 let with_tid bp f =

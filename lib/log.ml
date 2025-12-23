@@ -6,8 +6,8 @@ let mutex = Mutex.create ()
 let log fmt =
   Printf.ksprintf
     (fun msg ->
-      if Atomic.get enabled
-      then Mutex.protect mutex (fun () -> Printf.eprintf "%s\n%!" msg))
+       if Atomic.get enabled
+       then Mutex.protect mutex (fun () -> Printf.eprintf "%s\n%!" msg))
     fmt
 ;;
 

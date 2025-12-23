@@ -36,6 +36,7 @@ let flush_heap_page hf (hp : Heap_page.t) =
 let flush_page hf dbp =
   match dbp with
   | Db_page.DB_HeapPage hp -> flush_heap_page hf hp
+  | _ -> failwith "internal error - flush_page"
 ;;
 
 (* Handle phantom-read case where the writing transaction adds a new page.
@@ -72,6 +73,7 @@ let get_page hf page_no tid perm =
   in
   match page with
   | DB_HeapPage hp -> hp
+  | _ -> failwith "internal error - get_page"
 ;;
 
 let check_tuple_type hf (t : Tuple.t) =

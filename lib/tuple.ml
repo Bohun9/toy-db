@@ -31,6 +31,14 @@ type value =
   | VString of string
 [@@deriving show]
 
+let value_lt v1 v2 =
+  match v1, v2 with
+  | VInt n1, VInt n2 -> n1 < n2
+  | VBool b1, VBool b2 -> b1 < b2
+  | VString s1, VString s2 -> s1 < s2
+  | _ -> failwith "internal error - value_lt"
+;;
+
 let value_to_int = function
   | VInt n -> n
   | _ -> failwith "internal error - value_to_int"
@@ -70,7 +78,7 @@ let set_field_alias name alias =
 let set_desc_alias desc alias =
   List.map
     (fun (FieldMetadata fm) ->
-      FieldMetadata { fm with name = set_field_alias fm.name alias })
+       FieldMetadata { fm with name = set_field_alias fm.name alias })
     desc
 ;;
 
@@ -104,3 +112,9 @@ let trans_tuple vs =
 
 let extract_types desc = List.map (fun (FieldMetadata { typ; _ }) -> typ) desc
 let match_desc desc1 desc2 = extract_types desc1 = extract_types desc2
+let field t n = List.nth t.values n
+
+let field_type desc n =
+  let (FieldMetadata { typ; _ }) = List.nth desc n in
+  typ
+;;

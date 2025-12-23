@@ -23,8 +23,7 @@ let rec loop tid =
          printf "%s\n" (Tuple.show_tuple_descriptor desc)
        | sql_query ->
          (match Catalog.execute_sql sql_query catalog tid with
-          | Catalog.Stream s ->
-            Seq.iter (fun tuple -> printf "%s\n" (Tuple.show_tuple tuple)) s
+          | Catalog.Stream s -> Seq.iter (fun tuple -> printf "%s\n" (Tuple.show tuple)) s
           | Catalog.Nothing -> ())
      with
      | Error.DBError e ->
