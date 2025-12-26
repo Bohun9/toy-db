@@ -164,7 +164,7 @@ let rec insert_in_parent f n k n' tid =
   then (
     let children = [ node_page_no n; n' ] in
     let new_root = create_internal_node f None [ k ] children tid in
-    let new_root_page_no = Btree_internal_page.page_no new_root in
+    let new_root_page_no = Btree_node.page_no new_root in
     update_parent_pointers f children new_root_page_no tid;
     set_root f new_root_page_no tid)
   else (
@@ -173,16 +173,9 @@ let rec insert_in_parent f n k n' tid =
     | Btree_internal_page.Inserted -> ()
     | Btree_internal_page.Split { sep_key; keys; children } ->
       Log.log "btree internal split";
-      let p' =
-        create_internal_node f (Btree_internal_page.parent_opt p) keys children tid
-      in
-      update_parent_pointers f children (Btree_internal_page.page_no p') tid;
-      insert_in_parent
-        f
-        (Btree_page.InternalPage p)
-        sep_key
-        (Btree_internal_page.page_no p')
-        tid)
+      let p' = create_internal_node f (Btree_node.parent_opt p) keys children tid in
+      update_parent_pointers f children (Btree_node.page_no p') tid;
+      insert_in_parent f (Btree_page.InternalPage p) sep_key (Btree_node.page_no p') tid)
 ;;
 
 let insert_tuple f t tid =
@@ -195,17 +188,17 @@ let insert_tuple f t tid =
     let new_leaf =
       create_leaf_node
         f
-        (Btree_leaf_page.parent_opt leaf)
+        (Btree_node.parent_opt leaf)
         new_leaf_tuples
         (Btree_leaf_page.next_leaf_page leaf)
         tid
     in
-    Btree_leaf_page.set_next_leaf_page leaf (Some (Btree_leaf_page.page_no new_leaf));
+    Btree_leaf_page.set_next_leaf_page leaf (Some (Btree_node.page_no new_leaf));
     insert_in_parent
       f
       (Btree_page.LeafPage leaf)
       (Btree_leaf_page.lowest_key new_leaf)
-      (Btree_leaf_page.page_no new_leaf)
+      (Btree_node.page_no new_leaf)
       tid
 ;;
 
@@ -265,7 +258,7 @@ let rec delete_entry f internal k child tid =
         Btree_internal_page.coalesce left sibling.sep_key right
       in
       update_parent_pointers f moved_children new_father tid;
-      delete_entry f parent sibling.sep_key (Btree_internal_page.page_no right) tid)
+      delete_entry f parent sibling.sep_key (Btree_node.page_no right) tid)
     else if sibling.left
     then (
       Log.log "internal left redistribution";
@@ -277,11 +270,7 @@ let rec delete_entry f internal k child tid =
         borrowed_child
         sibling.sep_key;
       Btree_internal_page.replace_key parent sibling.sep_key borrowed_key;
-      update_parent_pointers
-        f
-        [ borrowed_child ]
-        (Btree_internal_page.page_no internal)
-        tid)
+      update_parent_pointers f [ borrowed_child ] (Btree_node.page_no internal) tid)
     else (
       Log.log "internal right redistribution";
       let borrowed_child, borrowed_key =
@@ -289,11 +278,7 @@ let rec delete_entry f internal k child tid =
       in
       Btree_internal_page.insert_entry_at_end internal sibling.sep_key borrowed_child;
       Btree_internal_page.replace_key parent sibling.sep_key borrowed_key;
-      update_parent_pointers
-        f
-        [ borrowed_child ]
-        (Btree_internal_page.page_no internal)
-        tid)
+      update_parent_pointers f [ borrowed_child ] (Btree_node.page_no internal) tid)
 ;;
 
 let delete_tuple f t tid =
@@ -309,7 +294,7 @@ let delete_tuple f t tid =
       Log.log "leaf coalescing";
       let left, right = if sibling.left then sibling.leaf, leaf else leaf, sibling.leaf in
       Btree_leaf_page.coalesce left right;
-      delete_entry f parent sibling.sep_key (Btree_leaf_page.page_no right) tid)
+      delete_entry f parent sibling.sep_key (Btree_node.page_no right) tid)
     else if sibling.left
     then (
       Log.log "leaf left redistribution";

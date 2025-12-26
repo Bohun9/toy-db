@@ -23,30 +23,30 @@ let deserialize page_no desc key_field data =
 ;;
 
 let page_no = function
-  | HeaderPage _ -> 0
-  | NodePage (InternalPage p) -> Btree_internal_page.page_no p
-  | NodePage (LeafPage p) -> Btree_leaf_page.page_no p
+  | HeaderPage p -> Generic_page.page_no p
+  | NodePage (InternalPage p) -> Btree_node.page_no p
+  | NodePage (LeafPage p) -> Btree_node.page_no p
 ;;
 
 let parent = function
-  | InternalPage p -> Btree_internal_page.parent p
-  | LeafPage p -> Btree_leaf_page.parent p
+  | InternalPage p -> Btree_node.parent p
+  | LeafPage p -> Btree_node.parent p
 ;;
 
 let set_parent n parent =
   match n with
-  | InternalPage p -> Btree_internal_page.set_parent p (Some parent)
-  | LeafPage p -> Btree_leaf_page.set_parent p (Some parent)
+  | InternalPage p -> Btree_node.set_parent p (Some parent)
+  | LeafPage p -> Btree_node.set_parent p (Some parent)
 ;;
 
 let is_dirty = function
-  | HeaderPage p -> Btree_header_page.is_dirty p
-  | NodePage (InternalPage p) -> Btree_internal_page.is_dirty p
-  | NodePage (LeafPage p) -> Btree_leaf_page.is_dirty p
+  | HeaderPage p -> Generic_page.is_dirty p
+  | NodePage (InternalPage p) -> Btree_node.is_dirty p
+  | NodePage (LeafPage p) -> Btree_node.is_dirty p
 ;;
 
 let clear_dirty = function
-  | HeaderPage p -> Btree_header_page.clear_dirty p
-  | NodePage (InternalPage p) -> Btree_internal_page.clear_dirty p
-  | NodePage (LeafPage p) -> Btree_leaf_page.clear_dirty p
+  | HeaderPage p -> Generic_page.clear_dirty p
+  | NodePage (InternalPage p) -> Btree_node.clear_dirty p
+  | NodePage (LeafPage p) -> Btree_node.clear_dirty p
 ;;
