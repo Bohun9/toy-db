@@ -36,49 +36,44 @@ let get_num_pages file =
 
 let value_storage_size vt =
   match vt with
-  | Tuple.TInt -> Tuple.int_size
-  | Tuple.TString -> Tuple.string_max_length
-  | Tuple.TBool -> failwith "internal error - value_storage_size"
+  | Type.TInt -> Value.int_size
+  | Type.TString -> Value.string_max_length
 ;;
 
-let tuple_storage_size desc =
-  let types = List.map (fun (Tuple.FieldMetadata { typ; _ }) -> typ) desc in
-  let sizes = List.map value_storage_size types in
+let tuple_storage_size schema =
+  let sizes = List.map value_storage_size (Table_schema.types schema) in
   List.fold_left ( + ) 0 sizes
 ;;
 
 let serialize_value b = function
-  | Tuple.VInt n -> Buffer.add_int64_le b (Int64.of_int n)
-  | Tuple.VString s ->
-    assert (String.length s <= Tuple.string_max_length);
-    let padded = s ^ String.make (Tuple.string_max_length - String.length s) '\x00' in
+  | Value.VInt n -> Buffer.add_int64_le b (Int64.of_int n)
+  | Value.VString s ->
+    assert (String.length s <= Value.string_max_length);
+    let padded = s ^ String.make (Value.string_max_length - String.length s) '\x00' in
     Buffer.add_string b padded
-  | Tuple.VBool _ -> failwith "internal error - serialize_value"
 ;;
 
 let serialize_tuple b (t : Tuple.t) = List.iter (serialize_value b) t.values
 
 let deserialize_value c vt =
   match vt with
-  | Tuple.TInt -> Tuple.VInt (Int64.to_int (Cursor.read_int64_le c))
-  | Tuple.TString ->
-    let raw = Cursor.read_string c Tuple.string_max_length in
+  | Type.TInt -> Value.VInt (Int64.to_int (Cursor.read_int64_le c))
+  | Type.TString ->
+    let raw = Cursor.read_string c Value.string_max_length in
     let s =
       match String.index_opt raw '\x00' with
       | Some i -> String.sub raw 0 i
       | None -> raw
     in
-    Tuple.VString s
-  | Tuple.TBool -> failwith "internal error - deserialize_value"
+    Value.VString s
 ;;
 
-let deserialize_values c desc =
-  List.map (fun (Tuple.FieldMetadata { typ; _ }) -> deserialize_value c typ) desc
+let deserialize_values c schema =
+  Table_schema.types schema |> List.map (deserialize_value c)
 ;;
 
-let deserialize_tuple c desc page_no slot_idx : Tuple.t =
-  { desc
-  ; values = deserialize_values c desc
+let deserialize_tuple c schema page_no slot_idx : Tuple.t =
+  { values = deserialize_values c schema
   ; rid = Some (Tuple.RecordID { page_no; slot_idx })
   }
 ;;
@@ -86,7 +81,7 @@ let deserialize_tuple c desc page_no slot_idx : Tuple.t =
 module type DBFILE = sig
   type t
 
-  val desc : t -> Tuple.tuple_descriptor
   val insert_tuple : t -> Tuple.t -> Transaction_id.t -> unit
   val scan_file : t -> Transaction_id.t -> Tuple.t Seq.t
+  val schema : t -> Table_schema.t
 end

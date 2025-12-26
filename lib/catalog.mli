@@ -15,7 +15,7 @@ val execute_sql : string -> t -> Transaction_id.t -> query_result
 
 (* val process_ddl_query : t -> Syntax.ddl -> unit *)
 val get_table_names : t -> string list
-val get_table_desc : t -> string -> Tuple.tuple_descriptor
+val get_table_schema : t -> string -> Table_schema.t
 val begin_new_transaction : t -> Transaction_id.t
 val commit_transaction : t -> Transaction_id.t -> unit
 val sync_to_disk : t -> unit

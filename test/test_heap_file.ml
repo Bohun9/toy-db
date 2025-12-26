@@ -3,7 +3,7 @@ open Toydb
 module U = Test_utils
 
 let test_insert _ =
-  U.with_temp_heap_file U.counter_desc (fun hf bp ->
+  U.with_temp_heap_file U.counter_schema (fun hf bp ->
     U.with_tid bp (fun tid ->
       Heap_file.insert_tuple hf (U.make_counter_tuple 0) tid;
       Heap_file.insert_tuple hf (U.make_counter_tuple 1) tid;
@@ -14,7 +14,7 @@ let test_insert _ =
 ;;
 
 let test_delete _ =
-  U.with_temp_heap_file U.counter_desc (fun hf bp ->
+  U.with_temp_heap_file U.counter_schema (fun hf bp ->
     U.with_tid bp (fun tid ->
       Heap_file.insert_tuple hf (U.make_counter_tuple 1) tid;
       Heap_file.insert_tuple hf (U.make_counter_tuple 2) tid;

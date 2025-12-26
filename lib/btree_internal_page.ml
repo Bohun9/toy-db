@@ -6,7 +6,7 @@ let node_type_id = '0'
 
 type internal_data =
   { max_num_keys : int
-  ; mutable keys : Tuple.value list
+  ; mutable keys : Value.t list
   ; mutable children : int list
   }
 
@@ -36,7 +36,7 @@ let create page_no parent keys children =
 ;;
 
 let find_child p k =
-  match List.find_index (Tuple.value_lt k) (keys p) with
+  match List.find_index (Value.value_lt k) (keys p) with
   | Some i -> List.nth (children p) i
   | None -> List.nth (children p) (List.length (keys p))
 ;;
@@ -70,8 +70,8 @@ let deserialize page_no key_type data =
 type insert_result =
   | Inserted
   | Split of
-      { sep_key : Tuple.value
-      ; keys : Tuple.value list
+      { sep_key : Value.t
+      ; keys : Value.t list
       ; children : int list
       }
 
@@ -84,7 +84,7 @@ let delete_at i xs = List.take i xs @ List.drop (i + 1) xs
 
 let insert_entry p k child =
   let index =
-    match List.find_index (Tuple.value_lt k) (keys p) with
+    match List.find_index (Value.value_lt k) (keys p) with
     | Some i -> i
     | None -> List.length (keys p)
   in
@@ -114,7 +114,7 @@ let insert_entry_at_end p k child =
 
 type sibling =
   { node : int
-  ; sep_key : Tuple.value
+  ; sep_key : Value.t
   ; left : bool
   }
 

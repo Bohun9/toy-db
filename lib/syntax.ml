@@ -1,7 +1,4 @@
-type binop =
-  | Eq
-  | Neq
-  | Add
+type relop = Eq
 
 type field_name =
   | PureFieldName of string
@@ -17,10 +14,12 @@ type value =
 
 type tuple = value list
 
-type expr =
-  | EValue of value
-  | EField of field_name
-  | EBinop of expr * binop * expr
+let derive_value_type = function
+  | VInt _ -> Type.TInt
+  | VString _ -> Type.TString
+;;
+
+let derive_tuple_type = List.map derive_value_type
 
 type select_exprs = Star
 
@@ -32,37 +31,31 @@ type table_expr =
   | Join of
       { tab1 : table_expr
       ; tab2 : table_expr
-      ; e1 : expr
-      ; e2 : expr
+      ; field1 : field_name
+      ; field2 : field_name
       }
 
-type dml =
+type predicate =
+  { field : field_name
+  ; op : relop
+  ; value : value
+  }
+
+type stmt =
   | Select of
       { exprs : select_exprs
       ; table_expr : table_expr
-      ; predicates : expr list
+      ; predicates : predicate list
       }
   | InsertValues of
       { table : string
       ; tuples : tuple list
       }
 
-type column_type =
-  | TInt
-  | TString
-
-type column_data =
-  | ColumnData of
-      { name : string
-      ; typ : column_type
-      }
-
-type table_schema = column_data list
-
 type ddl =
-  | CreateTable of string * table_schema
+  | CreateTable of string * Table_schema.t
   | DropTable of string
 
 type sql =
-  | SQL_DML of dml
+  | SQL_Stmt of stmt
   | SQL_DDL of ddl

@@ -3,7 +3,7 @@ open Toydb
 module U = Test_utils
 
 let test_insert _ =
-  U.with_temp_btree_file U.counter_desc 0 (fun bt bp ->
+  U.with_temp_btree_file U.counter_schema 0 (fun bt bp ->
     U.with_tid bp (fun tid ->
       let num_tuples = 512 in
       let sorted = List.init num_tuples U.make_counter_tuple in
@@ -11,14 +11,14 @@ let test_insert _ =
       List.iter (fun t -> Btree_file.insert_tuple bt t tid) shuffled;
       let tuples =
         List.of_seq
-          (Btree_file.range_scan bt (Tuple.VInt Int.min_int) (Tuple.VInt Int.max_int) tid)
+          (Btree_file.range_scan bt (Value.VInt Int.min_int) (Value.VInt Int.max_int) tid)
       in
       U.assert_int_eq num_tuples (List.length tuples);
       List.iter2 U.assert_tuple_eq sorted tuples))
 ;;
 
 let test_delete _ =
-  U.with_temp_btree_file U.counter_desc 0 (fun bt bp ->
+  U.with_temp_btree_file U.counter_schema 0 (fun bt bp ->
     U.with_tid bp (fun tid ->
       let num_tuples = 512 in
       let num_deletions = 444 in
@@ -31,7 +31,7 @@ let test_delete _ =
       List.iter (fun t -> Btree_file.delete_tuple bt t tid) deletions;
       let tuples =
         List.of_seq
-          (Btree_file.range_scan bt (Tuple.VInt Int.min_int) (Tuple.VInt Int.max_int) tid)
+          (Btree_file.range_scan bt (Value.VInt Int.min_int) (Value.VInt Int.max_int) tid)
       in
       U.assert_int_eq (num_tuples - num_deletions) (List.length tuples);
       List.iter2 U.assert_tuple_eq remaining_sorted tuples))

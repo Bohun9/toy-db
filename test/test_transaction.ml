@@ -7,7 +7,7 @@ module U = Test_utils
 
 let read_counter hf tid =
   let t = Heap_file.scan_file hf tid |> List.of_seq |> List.hd in
-  Tuple.value_to_int (List.hd t.values), t.rid
+  Value.value_to_int (List.hd t.values), t.rid
 ;;
 
 let rec do_transaction task_id hf bp =
@@ -26,7 +26,7 @@ let rec do_transaction task_id hf bp =
 ;;
 
 let test_parallel num_domains num_trans _ =
-  U.with_temp_heap_file U.counter_desc (fun hf bp ->
+  U.with_temp_heap_file U.counter_schema (fun hf bp ->
     Test_utils.with_tid bp (fun tid ->
       Heap_file.insert_tuple hf (U.make_counter_tuple 0) tid);
     let pool = T.setup_pool ~num_domains:(num_domains - 1) () in

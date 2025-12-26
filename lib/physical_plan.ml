@@ -1,120 +1,133 @@
 type expr =
-  | EValue of Tuple.value
-  | EField of Syntax.field_name
-  | EBinop of expr * Syntax.binop * expr
+  | EValue of Value.t
+  | EAttributeFetch of int
 
-let rec trans_expr (e : Syntax.expr) =
-  match e with
-  | Syntax.EValue v -> EValue (Tuple.trans_value v)
-  | Syntax.EField fn -> EField fn
-  | Syntax.EBinop (e1, op, e2) -> EBinop (trans_expr e1, op, trans_expr e2)
-;;
-
-let get_field_index desc fn =
-  match List.find_index (fun (Tuple.FieldMetadata { name; _ }) -> name = fn) desc with
-  | Some i -> i
-  | None -> failwith "internal error - get_field_index"
-;;
-
-let rec eval_expr e (t : Tuple.t) =
+let eval_expr e t =
   match e with
   | EValue v -> v
-  | EField fn -> List.nth t.values (get_field_index t.desc fn)
-  | EBinop (e1, op, e2) ->
-    let v1 = eval_expr e1 t in
-    let v2 = eval_expr e2 t in
-    (match op with
-     | Eq -> Tuple.VBool (v1 = v2)
-     | Neq -> Tuple.VBool (v1 <> v2)
-     | Add ->
-       (match v1, v2 with
-        | Tuple.VInt n1, Tuple.VInt n2 -> Tuple.VInt (n1 + n2)
-        | Tuple.VString s1, Tuple.VString s2 -> Tuple.VString (s1 ^ s2)
-        | _ -> raise (Error.DBError Error.Type_mismatch)))
+  | EAttributeFetch i -> Tuple.field t i
 ;;
 
-type t =
-  | SeqScan of
-      { file : Table_registry.packed_dbfile
-      ; alias : string
-      }
+type physical_plan_data =
+  | SeqScan of { file : Table_registry.packed_dbfile }
   | Insert of
-      { file : Table_registry.packed_dbfile
-      ; child : t
+      { child : t
+      ; file : Table_registry.packed_dbfile
       }
   | Const of { tuples : Tuple.t list }
   | Filter of
-      { pred : expr
-      ; child : t
+      { child : t
+      ; e1 : expr
+      ; op : Syntax.relop
+      ; e2 : expr
       }
   | Join of
-      { e1 : expr
-      ; e2 : expr
-      ; child1 : t
+      { child1 : t
       ; child2 : t
+      ; e1 : expr
+      ; e2 : expr
       }
 
-let rec make_plan_table_expr cat = function
-  | Syntax.Table { name; alias } ->
-    let alias = Option.value alias ~default:name in
-    SeqScan { file = Table_registry.get_table cat name; alias }
-  | Syntax.Join { tab1; tab2; e1; e2 } ->
-    Join
-      { e1 = trans_expr e1
-      ; e2 = trans_expr e2
-      ; child1 = make_plan_table_expr cat tab1
-      ; child2 = make_plan_table_expr cat tab2
-      }
-;;
+and t =
+  { desc : Tuple_desc.t
+  ; plan : physical_plan_data
+  }
 
-let make_plan_predicates fs pp =
-  List.fold_left (fun acc f -> Filter { pred = trans_expr f; child = acc }) pp fs
-;;
+let make_pp desc plan = { desc; plan }
 
-let make_plan cat stmt =
-  match stmt with
-  | Syntax.Select { exprs; table_expr; predicates } ->
-    make_plan_table_expr cat table_expr |> make_plan_predicates predicates
-  | Syntax.InsertValues { table; tuples } ->
-    Insert
-      { file = Table_registry.get_table cat table
-      ; child = Const { tuples = List.map Tuple.trans_tuple tuples }
-      }
-;;
-
-let rec execute_plan tid pp =
-  match pp with
-  | SeqScan { file; alias } ->
+let rec build_plan_table_expr reg = function
+  | Logical_plan.Table { name; alias } ->
+    let file = Table_registry.get_table reg name in
     let (Table_registry.PackedDBFile (m, f)) = file in
     let module M = (val m) in
-    Seq.map (Tuple.set_tuple_alias alias) (M.scan_file f tid)
-  | Insert { file; child } ->
+    make_pp (Tuple_desc.from_table_schema (M.schema f) alias) @@ SeqScan { file }
+  | Logical_plan.Join { tab1; tab2; field1; field2 } ->
+    let pp1 = build_plan_table_expr reg tab1 in
+    let pp2 = build_plan_table_expr reg tab2 in
+    let field_index1 = Tuple_desc.field_index pp1.desc field1 in
+    let field_index2 = Tuple_desc.field_index pp2.desc field2 in
+    make_pp (Tuple_desc.combine pp1.desc pp2.desc)
+    @@ Join
+         { child1 = pp1
+         ; child2 = pp2
+         ; e1 = EAttributeFetch field_index1
+         ; e2 = EAttributeFetch field_index2
+         }
+;;
+
+let build_plan_predicate pp alias ({ column; op; value } : Logical_plan.predicate) =
+  let field_index = Tuple_desc.field_index pp.desc { table_alias = alias; column } in
+  make_pp pp.desc
+  @@ Filter
+       { child = pp
+       ; e1 = EAttributeFetch field_index
+       ; op
+       ; e2 = EValue (Value.trans value)
+       }
+;;
+
+let build_plan_predicates pp (alias, preds) =
+  List.fold_left (fun acc pred -> build_plan_predicate pp alias pred) pp preds
+;;
+
+let build_plan reg logical_plan =
+  match logical_plan with
+  | Logical_plan.Select { table_expr; predicates } ->
+    let pp = build_plan_table_expr reg table_expr in
+    let predicates = predicates |> Hashtbl.to_seq |> List.of_seq in
+    List.fold_left build_plan_predicates pp predicates
+  | Logical_plan.InsertValues { table; tuples } ->
+    let file = Table_registry.get_table reg table in
+    make_pp
+      Tuple_desc.dummy
+      (Insert
+         { child =
+             make_pp
+               Tuple_desc.dummy
+               (Const { tuples = List.map Tuple.trans_tuple tuples })
+         ; file
+         })
+;;
+
+let rec execute_plan' tid pp =
+  match pp with
+  | SeqScan { file } ->
+    let (Table_registry.PackedDBFile (m, f)) = file in
+    let module M = (val m) in
+    M.scan_file f tid
+  | Insert { child; file } ->
     let (Table_registry.PackedDBFile (m, f)) = file in
     let module M = (val m) in
     Seq.iter (fun t -> M.insert_tuple f t tid) (execute_plan tid child);
     Seq.empty
   | Const { tuples } -> List.to_seq tuples
-  | Filter { pred; child } ->
-    Seq.filter (fun t -> eval_expr pred t = Tuple.VBool true) (execute_plan tid child)
-  | Join { e1; e2; child1; child2 } ->
+  | Filter { child; e1; op; e2 } ->
+    Seq.filter
+      (fun t ->
+         let v1 = eval_expr e1 t in
+         let v2 = eval_expr e2 t in
+         Value.value_eval_relop v1 op v2)
+      (execute_plan tid child)
+  | Join { child1; child2; e1; e2 } ->
     fun () ->
       let groups = Hashtbl.create 16 in
       Seq.iter
         (fun t1 ->
-          let v1 = eval_expr e1 t1 in
-          let new_group =
-            match Hashtbl.find_opt groups v1 with
-            | Some group -> t1 :: group
-            | None -> [ t1 ]
-          in
-          Hashtbl.replace groups v1 new_group)
+           let v1 = eval_expr e1 t1 in
+           let new_group =
+             match Hashtbl.find_opt groups v1 with
+             | Some group -> t1 :: group
+             | None -> [ t1 ]
+           in
+           Hashtbl.replace groups v1 new_group)
         (execute_plan tid child1);
       Seq.flat_map
         (fun t2 ->
-          let v2 = eval_expr e2 t2 in
-          match Hashtbl.find_opt groups v2 with
-          | Some group -> List.to_seq (List.map (Fun.flip Tuple.combine_tuple t2) group)
-          | None -> Seq.empty)
+           let v2 = eval_expr e2 t2 in
+           match Hashtbl.find_opt groups v2 with
+           | Some group -> List.to_seq (List.map (Fun.flip Tuple.combine_tuple t2) group)
+           | None -> Seq.empty)
         (execute_plan tid child2)
         ()
-;;
+
+and execute_plan tid { plan; _ } = execute_plan' tid plan

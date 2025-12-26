@@ -2,12 +2,11 @@ type page = Heap_page.t
 
 type t =
   { file : string
-  ; desc : Tuple.tuple_descriptor
+  ; schema : Table_schema.t
   ; buf_pool : Buffer_pool.t
   ; num_pages : int Atomic.t
   }
 
-let desc hf = hf.desc
 let num_pages hf = Atomic.get hf.num_pages
 let incr_num_pages hf = Atomic.incr hf.num_pages
 let page_key hf page_no = Page_key.PageKey { file = hf.file; page_no }
@@ -20,7 +19,7 @@ let load_heap_page hf page_no =
     (match In_channel.really_input ic data 0 (Bytes.length data) with
      | Some _ -> ()
      | None -> failwith "internal error - load_heap_page");
-    Heap_page.deserialize page_no hf.desc data)
+    Heap_page.deserialize page_no hf.schema data)
 ;;
 
 let load_page hf page_no = Db_page.DB_HeapPage (load_heap_page hf page_no)
@@ -45,18 +44,18 @@ let flush_page hf dbp =
 let ensure_at_least_one_page hf =
   if num_pages hf = 0
   then (
-    let hp = Heap_page.create 0 hf.desc in
+    let hp = Heap_page.create 0 hf.schema in
     flush_heap_page hf hp)
 ;;
 
-let create file desc buf_pool =
+let create file schema buf_pool =
   let len =
     In_channel.with_open_gen [ In_channel.Open_creat ] 0o666 file (fun ic ->
       Int64.to_int (In_channel.length ic))
   in
   assert (len mod Heap_page.page_size = 0);
   let num_pages = len / Heap_page.page_size in
-  let hf = { file; desc; buf_pool; num_pages = Atomic.make num_pages } in
+  let hf = { file; schema; buf_pool; num_pages = Atomic.make num_pages } in
   ensure_at_least_one_page hf;
   hf
 ;;
@@ -76,9 +75,9 @@ let get_page hf page_no tid perm =
   | _ -> failwith "internal error - get_page"
 ;;
 
-let check_tuple_type hf (t : Tuple.t) =
-  if not (Tuple.match_desc hf.desc t.desc) then raise Error.type_mismatch
-;;
+(* let check_tuple_type hf (t : Tuple.t) = *)
+(*   if not (Tuple.match_desc hf.desc t.desc) then raise Error.type_mismatch *)
+(* ;; *)
 
 (* The number of pages may increase during iteration in
    [insert_tuple] and [scan_file], so this function is required. *)
@@ -87,19 +86,21 @@ let seq_dynamic_init size_fn f =
   iter 0
 ;;
 
+let schema f = f.schema
+
 let insert_tuple hf (t : Tuple.t) tid =
-  check_tuple_type hf t;
-  let t = Tuple.set_tuple_desc t hf.desc in
+  (* check_tuple_type hf t; *)
+  (* let t = Tuple.set_tuple_desc t hf.desc in *)
   let pages = seq_dynamic_init (fun () -> num_pages hf) Fun.id in
   match
     Seq.find
       (fun page_no ->
-        Heap_page.insert_tuple (get_page hf page_no tid Lock_manager.WritePerm) t)
+         Heap_page.insert_tuple (get_page hf page_no tid Lock_manager.WritePerm) t)
       pages
   with
   | Some _ -> ()
   | None ->
-    let new_page = Heap_page.create (num_pages hf) hf.desc in
+    let new_page = Heap_page.create (num_pages hf) hf.schema in
     incr_num_pages hf;
     assert (Heap_page.insert_tuple new_page t);
     flush_heap_page hf new_page

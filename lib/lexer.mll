@@ -5,6 +5,7 @@ let kw_map = [
   "SELECT", SELECT;
   "FROM", FROM;
   "WHERE", WHERE;
+  "AND", AND;
   "JOIN", JOIN;
   "ON", ON;
   "CREATE", CREATE;

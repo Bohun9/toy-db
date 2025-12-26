@@ -17,11 +17,7 @@ let delete_table reg name =
   else raise Error.table_not_found
 ;;
 
-let get_table reg name =
-  match Hashtbl.find_opt reg.tables name with
-  | Some p -> p
-  | None -> raise Error.table_not_found
-;;
-
+let get_table_opt reg = Hashtbl.find_opt reg.tables
+let get_table reg = Hashtbl.find reg.tables
 let has_table reg name = Hashtbl.mem reg.tables name
 let get_table_names reg = Hashtbl.to_seq_keys reg.tables |> List.of_seq

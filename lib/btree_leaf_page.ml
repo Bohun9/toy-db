@@ -54,14 +54,14 @@ let serialize p =
   Buffer.to_bytes b
 ;;
 
-let deserialize page_no desc key_field data =
+let deserialize page_no schema key_field data =
   let c = Cursor.create data in
   let node_type = Cursor.read_char c in
   assert (node_type = node_type_id);
   let parent = Cursor.read_int64_le c |> Int64.to_int |> Btree_node.decode_parent in
   let next_leaf_page = Cursor.read_int64_le c |> Int64.to_int |> decode_next_leaf_page in
   let num_tuples = Cursor.read_int16_le c in
-  let tuples = List.init num_tuples (Db_file.deserialize_tuple c desc page_no) in
+  let tuples = List.init num_tuples (Db_file.deserialize_tuple c schema page_no) in
   create page_no key_field parent tuples next_leaf_page
 ;;
 
@@ -74,7 +74,7 @@ let split_at i xs = List.take i xs, List.drop i xs
 let insert_tuple (p : t) t =
   let k = get_key p t in
   let new_tuples =
-    match List.find_index (fun t -> Tuple.value_lt k (get_key p t)) (tuples p) with
+    match List.find_index (fun t -> Value.value_lt k (get_key p t)) (tuples p) with
     | Some i ->
       let l, r = split_at i (tuples p) in
       l @ (t :: r)

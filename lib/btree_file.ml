@@ -1,6 +1,6 @@
 type t =
   { file : string
-  ; desc : Tuple.tuple_descriptor
+  ; schema : Table_schema.t
   ; buf_pool : Buffer_pool.t
   ; num_pages : int Atomic.t
   ; key_field : int
@@ -10,6 +10,7 @@ let page_key f page_no = Page_key.PageKey { file = f.file; page_no }
 let get_key f t = Tuple.field t f.key_field
 let fresh_page_no f = Atomic.fetch_and_add f.num_pages 1
 let num_pages f = Atomic.get f.num_pages
+let schema f = f.schema
 
 let flush_btree_page f p =
   p |> Btree_page.serialize |> Db_file.flush_raw_page f.file (Btree_page.page_no p);
@@ -40,9 +41,9 @@ let initialize f key_field =
   flush_leaf_page f root
 ;;
 
-let create file desc buf_pool key_field =
+let create file schema buf_pool key_field =
   let num_pages = Db_file.get_num_pages file in
-  let f = { file; desc; buf_pool; num_pages = Atomic.make num_pages; key_field } in
+  let f = { file; schema; buf_pool; num_pages = Atomic.make num_pages; key_field } in
   if num_pages = 0 then initialize f key_field;
   f
 ;;
@@ -55,7 +56,7 @@ let load_header_page f =
 
 let load_node_page f page_no =
   Db_file.load_raw_page f.file page_no
-  |> Btree_page.deserialize page_no f.desc f.key_field
+  |> Btree_page.deserialize page_no f.schema f.key_field
   |> fun p -> Btree_page.NodePage p |> fun p -> Db_page.DB_BTreePage p
 ;;
 
@@ -209,7 +210,7 @@ let get_sibling f n tid =
 
 type leaf_sibling =
   { leaf : Btree_leaf_page.t
-  ; sep_key : Tuple.value
+  ; sep_key : Value.t
   ; left : bool
   }
 
@@ -224,7 +225,7 @@ let get_leaf_sibling f leaf tid =
 
 type internal_sibling =
   { internal : Btree_internal_page.t
-  ; sep_key : Tuple.value
+  ; sep_key : Value.t
   ; left : bool
   }
 
@@ -313,8 +314,8 @@ let delete_tuple f t tid =
 
 let range_scan f lb ub tid =
   let leaf = find_leaf f lb tid Lock_manager.ReadPerm in
-  let lp t = Tuple.value_lt lb (get_key f t) in
-  let up t = Tuple.value_lt (get_key f t) ub in
+  let lp t = Value.value_lt lb (get_key f t) in
+  let up t = Value.value_lt (get_key f t) ub in
   let rec scan_from_leaf leaf =
     Seq.append
       (Seq.filter (fun t -> lp t && up t) (Btree_leaf_page.scan_page leaf))
