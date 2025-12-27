@@ -47,7 +47,10 @@ let register_table cat name schema ~clear =
   let file_path = table_path cat name in
   if clear then remove_if_exists file_path;
   let hf = Heap_file.create file_path schema cat.buf_pool in
-  Table_registry.add_table cat.table_registry name (module Heap_file) hf
+  Table_registry.add_table
+    cat.table_registry
+    name
+    (Packed_dbfile.TableFile (PackedTable ((module Heap_file), hf)))
 ;;
 
 let begin_new_transaction cat =
@@ -134,20 +137,15 @@ let get_table cat name =
   | None -> raise Error.table_not_found
 ;;
 
-let get_table_schema cat name =
-  let (PackedDBFile (m, f)) = get_table cat name in
-  let module M = (val m) in
-  M.schema f
-;;
-
+let get_table_schema cat name = get_table cat name |> Packed_dbfile.schema
 let sync_to_disk cat = Buffer_pool.flush_all_pages cat.buf_pool
 
 let register_metatable cat name file schema =
   Table_registry.add_table
     cat.table_registry
     name
-    (module Heap_file)
-    (Heap_file.create file schema cat.buf_pool)
+    (Packed_dbfile.TableFile
+       (PackedTable ((module Heap_file), Heap_file.create file schema cat.buf_pool)))
 ;;
 
 let register_metatables cat =

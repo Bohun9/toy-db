@@ -92,12 +92,11 @@ let get_table reg name =
   | None -> raise Error.table_not_found
 ;;
 
+let get_table_schema reg name = get_table reg name |> Packed_dbfile.schema
+
 let rec check_table_expr reg = function
   | Syntax.Table { name; alias } ->
-    let file = get_table reg name in
-    let (Table_registry.PackedDBFile (m, f)) = file in
-    let module M = (val m) in
-    let sch = M.schema f in
+    let sch = get_table_schema reg name in
     let alias = Option.value alias ~default:name in
     Table { name; alias }, Env.extend alias sch Env.empty
   | Syntax.Join { tab1; tab2; field1; field2 } ->
@@ -125,10 +124,7 @@ let build_plan reg = function
       predicates;
     Select { table_expr; predicates = grouped_predicates }
   | Syntax.InsertValues { table; tuples } ->
-    let file = get_table reg table in
-    let (Table_registry.PackedDBFile (m, f)) = file in
-    let module M = (val m) in
-    let sch = M.schema f in
+    let sch = get_table_schema reg table in
     let tuple_types = List.map Syntax.derive_tuple_type tuples in
     if List.for_all (Table_schema.typecheck sch) tuple_types
     then InsertValues { table; tuples }

@@ -1,14 +1,11 @@
-type packed_dbfile =
-  | PackedDBFile : (module Db_file.DBFILE with type t = 't) * 't -> packed_dbfile
-
-type t = { tables : (string, packed_dbfile) Hashtbl.t }
+type t = { tables : (string, Packed_dbfile.t) Hashtbl.t }
 
 let create n = { tables = Hashtbl.create n }
 
-let add_table reg name m f =
+let add_table reg name packed =
   if Hashtbl.mem reg.tables name
   then raise Error.table_already_exists
-  else Hashtbl.add reg.tables name (PackedDBFile (m, f))
+  else Hashtbl.add reg.tables name packed
 ;;
 
 let delete_table reg name =

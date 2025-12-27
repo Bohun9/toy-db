@@ -9,10 +9,10 @@ let eval_expr e t =
 ;;
 
 type physical_plan_data =
-  | SeqScan of { file : Table_registry.packed_dbfile }
+  | SeqScan of { file : Packed_dbfile.table_file }
   | Insert of
       { child : t
-      ; file : Table_registry.packed_dbfile
+      ; file : Packed_dbfile.table_file
       }
   | Const of { tuples : Tuple.t list }
   | Filter of
@@ -37,10 +37,15 @@ let make_pp desc plan = { desc; plan }
 
 let rec build_plan_table_expr reg = function
   | Logical_plan.Table { name; alias } ->
-    let file = Table_registry.get_table reg name in
-    let (Table_registry.PackedDBFile (m, f)) = file in
-    let module M = (val m) in
-    make_pp (Tuple_desc.from_table_schema (M.schema f) alias) @@ SeqScan { file }
+    (match Table_registry.get_table reg name with
+     | Packed_dbfile.TableFile file ->
+       let (Packed_dbfile.PackedTable (m, f)) = file in
+       let module M = (val m) in
+       make_pp (Tuple_desc.from_table_schema (M.schema f) alias) @@ SeqScan { file }
+     | Packed_dbfile.IndexFile file ->
+       let (Packed_dbfile.PackedIndex (m, f)) = file in
+       let module M = (val m) in
+       failwith "internal error")
   | Logical_plan.Join { tab1; tab2; field1; field2 } ->
     let pp1 = build_plan_table_expr reg tab1 in
     let pp2 = build_plan_table_expr reg tab2 in
@@ -85,18 +90,16 @@ let build_plan reg logical_plan =
              make_pp
                Tuple_desc.dummy
                (Const { tuples = List.map Tuple.trans_tuple tuples })
-         ; file
+         ; file = Packed_dbfile.to_table_file file
          })
 ;;
 
 let rec execute_plan' tid pp =
   match pp with
-  | SeqScan { file } ->
-    let (Table_registry.PackedDBFile (m, f)) = file in
+  | SeqScan { file = Packed_dbfile.PackedTable (m, f) } ->
     let module M = (val m) in
     M.scan_file f tid
-  | Insert { child; file } ->
-    let (Table_registry.PackedDBFile (m, f)) = file in
+  | Insert { child; file = Packed_dbfile.PackedTable (m, f) } ->
     let module M = (val m) in
     Seq.iter (fun t -> M.insert_tuple f t tid) (execute_plan tid child);
     Seq.empty
