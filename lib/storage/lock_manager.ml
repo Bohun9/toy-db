@@ -1,3 +1,4 @@
+open Core
 module PageKeySet = Set.Make (Page_key)
 module TransactionIdSet = Set.Make (Transaction_id)
 module TransactionIdGraph = Graph.Imperative.Digraph.Concrete (Transaction_id)
@@ -84,18 +85,18 @@ let check_deadlock lm page tid =
   let g = TransactionIdGraph.create () in
   Hashtbl.iter
     (fun t1 locked_pages ->
-      PageKeySet.iter
-        (fun locked_page ->
-          TransactionIdSet.iter
-            (fun t2 ->
-              if t1 <> t2
-              then
-                TransactionIdGraph.add_edge
-                  g
-                  (TransactionIdGraph.V.create t2)
-                  (TransactionIdGraph.V.create t1))
-            (get_blocked_trans lm page))
-        locked_pages)
+       PageKeySet.iter
+         (fun locked_page ->
+            TransactionIdSet.iter
+              (fun t2 ->
+                 if t1 <> t2
+                 then
+                   TransactionIdGraph.add_edge
+                     g
+                     (TransactionIdGraph.V.create t2)
+                     (TransactionIdGraph.V.create t1))
+              (get_blocked_trans lm page))
+         locked_pages)
     lm.tran_locks;
   let num_comps, _ = TransactionIdGraphSCC.scc g in
   let deadlock_free = num_comps = TransactionIdGraph.nb_vertex g in
@@ -144,11 +145,11 @@ let release_locks lm tid =
   | Some locked_pages ->
     PageKeySet.iter
       (fun page ->
-        match Hashtbl.find_opt lm.page_locks page with
-        | Some ExclusiveLock | Some (SharedLock 1) -> Hashtbl.remove lm.page_locks page
-        | Some (SharedLock num_trans) ->
-          Hashtbl.replace lm.page_locks page (SharedLock (num_trans - 1))
-        | None -> failwith "internal error - release_locks")
+         match Hashtbl.find_opt lm.page_locks page with
+         | Some ExclusiveLock | Some (SharedLock 1) -> Hashtbl.remove lm.page_locks page
+         | Some (SharedLock num_trans) ->
+           Hashtbl.replace lm.page_locks page (SharedLock (num_trans - 1))
+         | None -> failwith "internal error - release_locks")
       locked_pages;
     Hashtbl.remove lm.tran_locks tid
   | None -> ()

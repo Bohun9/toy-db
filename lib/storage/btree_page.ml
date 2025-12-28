@@ -1,3 +1,5 @@
+open Metadata
+
 type node_page =
   | InternalPage of Btree_internal_page.t
   | LeafPage of Btree_leaf_page.t

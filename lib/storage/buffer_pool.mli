@@ -1,3 +1,5 @@
+open Core
+
 type t
 
 val create : int -> Lock_manager.t -> t

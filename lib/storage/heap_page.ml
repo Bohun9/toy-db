@@ -1,3 +1,6 @@
+open Core
+open Metadata
+
 let page_size = 4096
 let page_header_size = 2
 
@@ -27,7 +30,9 @@ let clear_dirty hp = hp.dirty <- false
 (*   List.fold_left ( + ) 0 sizes *)
 (* ;; *)
 
-let num_slots schema = (page_size - page_header_size) / Db_file.tuple_storage_size schema
+let num_slots schema =
+  (page_size - page_header_size) / Storage_layout.tuple_storage_size schema
+;;
 
 let create page_no schema =
   { page_no
@@ -52,7 +57,7 @@ let create page_no schema =
 let serialize hp =
   let b = Buffer.create page_size in
   Buffer.add_int16_le b hp.num_tuples;
-  Array.iter (Option.iter (Db_file.serialize_tuple b)) hp.slots;
+  Array.iter (Option.iter (Storage_layout.serialize_tuple b)) hp.slots;
   Buffer.add_bytes b (Bytes.create (page_size - Buffer.length b));
   Buffer.to_bytes b
 ;;
@@ -86,7 +91,9 @@ let deserialize page_no schema data =
   (* in *)
   let slots =
     Array.init (num_slots schema) (fun i ->
-      if i < num_tuples then Some (Db_file.deserialize_tuple c schema page_no i) else None)
+      if i < num_tuples
+      then Some (Storage_layout.deserialize_tuple c schema page_no i)
+      else None)
   in
   { page_no; schema; slots; num_tuples; dirty = false }
 ;;

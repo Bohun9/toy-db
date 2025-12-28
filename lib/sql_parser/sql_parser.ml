@@ -1,4 +1,6 @@
-let parse_sql s =
+open Core
+
+let parse s =
   let lexbuf = Lexing.from_string s in
   try Parser.sql Lexer.token lexbuf with
   | Parser.Error ->

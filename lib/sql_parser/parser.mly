@@ -1,4 +1,5 @@
 %{
+open Core
 open Syntax
 %}
 
@@ -56,7 +57,7 @@ col_type
   | STRING { Type.TString }
 
 col_data
-  : ID col_type { { Table_schema.name = $1; typ = $2 } }
+  : ID col_type { { Syntax.name = $1; typ = $2 } }
 
 table_primary_key
   : /* empty */                      { None }

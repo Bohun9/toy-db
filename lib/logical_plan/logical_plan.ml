@@ -1,3 +1,6 @@
+open Core
+open Metadata
+
 type resolved_field =
   { table_alias : string
   ; column : string
@@ -92,7 +95,7 @@ let get_table reg name =
   | None -> raise Error.table_not_found
 ;;
 
-let get_table_schema reg name = get_table reg name |> Packed_dbfile.schema
+let get_table_schema reg name = get_table reg name |> Db_file.schema
 
 let rec check_table_expr reg = function
   | Syntax.Table { name; alias } ->

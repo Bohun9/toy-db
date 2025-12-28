@@ -1,3 +1,6 @@
+open Core
+open Metadata
+
 type page = Heap_page.t
 
 type t =

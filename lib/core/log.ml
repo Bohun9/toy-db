@@ -12,8 +12,8 @@ let log fmt =
 ;;
 
 let log_tid tid fmt = log ("[tid=%s] " ^^ fmt) (Transaction_id.show tid)
-let log_page page fmt = log ("[page=%s] " ^^ fmt) (Page_key.show page)
+let log_page _ fmt = log ("[page=%s] " ^^ fmt) "page"
 
-let log_tid_page tid page fmt =
-  log ("[tid=%s page=%s] " ^^ fmt) (Transaction_id.show tid) (Page_key.show page)
+let log_tid_page tid _ fmt =
+  log ("[tid=%s page=%s] " ^^ fmt) (Transaction_id.show tid) "page"
 ;;

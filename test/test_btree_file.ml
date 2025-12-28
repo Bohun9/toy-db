@@ -1,5 +1,4 @@
 open OUnit2
-open Toydb
 module U = Test_utils
 
 let test_insert _ =
@@ -8,9 +7,13 @@ let test_insert _ =
       let num_tuples = 512 in
       let sorted = List.init num_tuples U.make_counter_tuple in
       let shuffled = U.shuffle sorted in
-      List.iter (fun t -> Btree_file.insert_tuple bt t tid) shuffled;
+      List.iter (fun t -> Storage.Btree_file.insert_tuple bt t tid) shuffled;
       let tuples =
-        List.of_seq (Btree_file.range_scan bt (Value_interval.unbounded Type.TInt) tid)
+        List.of_seq
+          (Storage.Btree_file.range_scan
+             bt
+             (Core.Value_interval.unbounded Core.Type.TInt)
+             tid)
       in
       U.assert_int_eq num_tuples (List.length tuples);
       List.iter2 U.assert_tuple_eq sorted tuples))
@@ -23,13 +26,14 @@ let test_delete _ =
       let num_deletions = 444 in
       let sorted = List.init num_tuples U.make_counter_tuple in
       let shuffled = U.shuffle sorted in
-      List.iter (fun t -> Btree_file.insert_tuple bt t tid) shuffled;
+      List.iter (fun t -> Storage.Btree_file.insert_tuple bt t tid) shuffled;
       let deletions = List.take num_deletions shuffled in
       let remaining = List.drop num_deletions shuffled in
       let remaining_sorted = List.sort compare remaining in
-      List.iter (fun t -> Btree_file.delete_tuple bt t tid) deletions;
+      List.iter (fun t -> Storage.Btree_file.delete_tuple bt t tid) deletions;
       let tuples =
-        List.of_seq (Btree_file.range_scan bt (Value_interval.unbounded TInt) tid)
+        List.of_seq
+          (Storage.Btree_file.range_scan bt (Core.Value_interval.unbounded TInt) tid)
       in
       U.assert_int_eq (num_tuples - num_deletions) (List.length tuples);
       List.iter2 U.assert_tuple_eq remaining_sorted tuples))

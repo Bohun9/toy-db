@@ -57,8 +57,14 @@ type stmt =
       ; tuples : tuple list
       }
 
+type column_data =
+  { name : string
+  ; typ : Type.t
+  }
+[@@deriving show]
+
 type table_schema =
-  { columns : Table_schema.column_data list
+  { columns : column_data list
   ; primary_key : string option
   }
 

@@ -1,3 +1,6 @@
+open Core
+open Metadata
+
 type resolved_field =
   { table_alias : string
   ; column : string

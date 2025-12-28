@@ -1,3 +1,6 @@
+open Core
+open Metadata
+
 let page_size = 4096
 
 let load_raw_page file page_no =
@@ -77,19 +80,3 @@ let deserialize_tuple c schema page_no slot_idx : Tuple.t =
   ; rid = Some (Tuple.RecordID { page_no; slot_idx })
   }
 ;;
-
-module type TABLE_FILE = sig
-  type t
-
-  val file_path : t -> string
-  val insert_tuple : t -> Tuple.t -> Transaction_id.t -> unit
-  val scan_file : t -> Transaction_id.t -> Tuple.t Seq.t
-  val schema : t -> Table_schema.t
-end
-
-module type INDEX_FILE = sig
-  include TABLE_FILE
-
-  val key_info : t -> Table_schema.column_data
-  val range_scan : t -> Value_interval.t -> Transaction_id.t -> Tuple.t Seq.t
-end

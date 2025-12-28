@@ -1,3 +1,6 @@
+open Core
+open Metadata
+
 type attribute =
   { table_alias : string
   ; column : string

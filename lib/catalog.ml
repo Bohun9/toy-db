@@ -1,6 +1,9 @@
+open Core
+open Metadata
+
 type t =
   { dir : string
-  ; buf_pool : Buffer_pool.t
+  ; buf_pool : Storage.Buffer_pool.t
   ; table_registry : Table_registry.t
   }
 
@@ -13,8 +16,8 @@ let columns_metatable_path cat = metatable_path cat "columns"
 
 let tables_metatable_schema =
   Table_schema.create
-    [ Table_schema.{ name = "name"; typ = Type.TString }
-    ; Table_schema.{ name = "primary_key"; typ = Type.TString }
+    [ { name = "name"; typ = Type.TString }
+    ; { name = "primary_key"; typ = Type.TString }
     ]
     None
   |> Result.get_ok
@@ -27,7 +30,7 @@ let columns_metatable_schema =
      ; "type_id", Type.TInt
      ; "offset", Type.TInt
      ]
-     |> List.map (fun (name, typ) -> Table_schema.{ name; typ }))
+     |> List.map (fun (name, typ) -> Syntax.{ name; typ }))
     None
   |> Result.get_ok
 ;;
@@ -67,26 +70,26 @@ let register_table cat tname schema ~clear =
   if clear then remove_if_exists file_path;
   match Table_schema.primary_key schema with
   | None ->
-    let hf = Heap_file.create file_path schema cat.buf_pool in
+    let hf = Storage.Heap_file.create file_path schema cat.buf_pool in
     Table_registry.add_table
       cat.table_registry
       tname
-      (Packed_dbfile.TableFile (PackedTable ((module Heap_file), hf)))
+      (Db_file.TableFile (PackedTable ((module Storage.Heap_file), hf)))
   | Some (_, key_column_index) ->
-    let bt = Btree_file.create file_path schema cat.buf_pool key_column_index in
+    let bt = Storage.Btree_file.create file_path schema cat.buf_pool key_column_index in
     Table_registry.add_table
       cat.table_registry
       tname
-      (Packed_dbfile.IndexFile (PackedIndex ((module Btree_file), bt)))
+      (Db_file.IndexFile (PackedIndex ((module Storage.Btree_file), bt)))
 ;;
 
 let begin_new_transaction cat =
   let tid = Transaction_id.fresh_tid () in
-  Buffer_pool.begin_transaction cat.buf_pool tid;
+  Storage.Buffer_pool.begin_transaction cat.buf_pool tid;
   tid
 ;;
 
-let commit_transaction cat tid = Buffer_pool.commit_transaction cat.buf_pool tid
+let commit_transaction cat tid = Storage.Buffer_pool.commit_transaction cat.buf_pool tid
 
 let with_tid cat f =
   let tid = begin_new_transaction cat in
@@ -107,9 +110,9 @@ let execute_sql_stmt cat stmt tid =
 ;;
 
 let execute_sql_dml sql cat tid =
-  match Parser_wrapper.parse_sql sql with
-  | SQL_Stmt stmt -> ignore (execute_sql_stmt cat stmt tid |> List.of_seq)
-  | SQL_DDL _ -> failwith "internal error"
+  match Sql_parser.parse sql with
+  | Syntax.SQL_Stmt stmt -> ignore (execute_sql_stmt cat stmt tid |> List.of_seq)
+  | Syntax.SQL_DDL _ -> failwith "internal error"
 ;;
 
 let add_table cat name (schema : Syntax.table_schema) =
@@ -129,7 +132,7 @@ let add_table cat name (schema : Syntax.table_schema) =
       cat
       tid;
     List.iteri
-      (fun off Table_schema.{ name = cname; typ } ->
+      (fun off Syntax.{ name = cname; typ } ->
          execute_sql_dml
            (Printf.sprintf
               "INSERT INTO %s VALUES (\"%s\", \"%s\", %s, %s)"
@@ -155,9 +158,9 @@ let execute_ddl_query cat = function
 ;;
 
 let execute_sql query cat tid =
-  match Parser_wrapper.parse_sql query with
-  | SQL_Stmt stmt -> execute_sql_stmt cat stmt tid |> fun s -> Stream s
-  | SQL_DDL ddl ->
+  match Sql_parser.parse query with
+  | Syntax.SQL_Stmt stmt -> execute_sql_stmt cat stmt tid |> fun s -> Stream s
+  | Syntax.SQL_DDL ddl ->
     execute_ddl_query cat ddl;
     Nothing
 ;;
@@ -170,15 +173,16 @@ let get_table cat name =
   | None -> raise Error.table_not_found
 ;;
 
-let get_table_schema cat name = get_table cat name |> Packed_dbfile.schema
-let sync_to_disk cat = Buffer_pool.flush_all_pages cat.buf_pool
+let get_table_schema cat name = get_table cat name |> Db_file.schema
+let sync_to_disk cat = Storage.Buffer_pool.flush_all_pages cat.buf_pool
 
 let register_metatable cat name file schema =
   Table_registry.add_table
     cat.table_registry
     name
-    (Packed_dbfile.TableFile
-       (PackedTable ((module Heap_file), Heap_file.create file schema cat.buf_pool)))
+    (Db_file.TableFile
+       (PackedTable
+          ((module Storage.Heap_file), Storage.Heap_file.create file schema cat.buf_pool)))
 ;;
 
 let register_metatables cat =
@@ -237,7 +241,7 @@ let load_catalog_metadata cat =
     (fun (table, col, typ, off) ->
        match Hashtbl.find_opt table_columns table with
        | Some cols ->
-         let new_cols = (off, Table_schema.{ name = col; typ }) :: cols in
+         let new_cols = (off, Syntax.{ name = col; typ }) :: cols in
          Hashtbl.replace table_columns table new_cols
        | None -> failwith "internal error")
     (load_catalog_columns cat);
@@ -254,7 +258,9 @@ let load_catalog_metadata cat =
     tables
 ;;
 
-let create dir buf_pool =
+let create dir bp_num_pages =
+  let lock_manager = Storage.Lock_manager.create () in
+  let buf_pool = Storage.Buffer_pool.create bp_num_pages lock_manager in
   let cat = { dir; buf_pool; table_registry = Table_registry.create 16 } in
   register_metatables cat;
   load_catalog_metadata cat;
@@ -263,6 +269,6 @@ let create dir buf_pool =
 
 let delete_db_files cat =
   List.iter
-    (fun (_, dbfile) -> Sys.remove (Packed_dbfile.file_path dbfile))
+    (fun (_, dbfile) -> Sys.remove (Db_file.file_path dbfile))
     (Table_registry.get_tables cat.table_registry)
 ;;

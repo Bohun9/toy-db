@@ -1,3 +1,6 @@
+open Core
+open Metadata
+
 type t =
   { file : string
   ; schema : Table_schema.t
@@ -14,7 +17,7 @@ let num_pages f = Atomic.get f.num_pages
 let schema f = f.schema
 
 let flush_btree_page f p =
-  p |> Btree_page.serialize |> Db_file.flush_raw_page f.file (Btree_page.page_no p);
+  p |> Btree_page.serialize |> Storage_layout.flush_raw_page f.file (Btree_page.page_no p);
   Btree_page.clear_dirty p
 ;;
 
@@ -43,20 +46,20 @@ let initialize f key_field =
 ;;
 
 let create file schema buf_pool key_field =
-  let num_pages = Db_file.get_num_pages file in
+  let num_pages = Storage_layout.get_num_pages file in
   let f = { file; schema; buf_pool; num_pages = Atomic.make num_pages; key_field } in
   if num_pages = 0 then initialize f key_field;
   f
 ;;
 
 let load_header_page f =
-  Db_file.load_raw_page f.file 0
+  Storage_layout.load_raw_page f.file 0
   |> Btree_header_page.deserialize
   |> fun p -> Btree_page.HeaderPage p |> fun p -> Db_page.DB_BTreePage p
 ;;
 
 let load_node_page f page_no =
-  Db_file.load_raw_page f.file page_no
+  Storage_layout.load_raw_page f.file page_no
   |> Btree_page.deserialize page_no f.schema f.key_field
   |> fun p -> Btree_page.NodePage p |> fun p -> Db_page.DB_BTreePage p
 ;;

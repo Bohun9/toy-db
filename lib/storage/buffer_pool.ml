@@ -1,3 +1,5 @@
+open Core
+
 type page_info =
   { page : Db_page.t
   ; flush_page : Db_page.t -> unit

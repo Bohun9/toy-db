@@ -1,0 +1,6 @@
+(library
+ (name logical_plan)
+ (preprocess (pps ppx_deriving.show))
+ (libraries core metadata)
+ (flags (:standard -w -26-27-32-37-69))
+ )

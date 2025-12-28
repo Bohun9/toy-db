@@ -1,5 +1,5 @@
-(* type packed_dbfile = *)
-(*   | PackedDBFile : (module Db_file.DBFILE with type t = 't) * 't -> packed_dbfile *)
+open Core
+open Metadata
 
 type t
 
@@ -7,7 +7,7 @@ type query_result =
   | Stream of Tuple.t Seq.t
   | Nothing
 
-val create : string -> Buffer_pool.t -> t
+val create : string -> int -> t
 val execute_sql : string -> t -> Transaction_id.t -> query_result
 
 (* val add_table : t -> string -> Tuple.tuple_descriptor -> clear:bool -> unit *)

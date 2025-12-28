@@ -1,3 +1,6 @@
+open Core
+open Metadata
+
 type expr =
   | EValue of Value.t
   | EAttributeFetch of int
@@ -9,14 +12,14 @@ let eval_expr e t =
 ;;
 
 type physical_plan_data =
-  | SeqScan of { file : Packed_dbfile.table_file }
+  | SeqScan of { file : Db_file.table_file }
   | RangeScan of
-      { file : Packed_dbfile.index_file
+      { file : Db_file.index_file
       ; interval : Value_interval.t
       }
   | Insert of
       { child : t
-      ; file : Packed_dbfile.table_file
+      ; file : Db_file.table_file
       }
   | Const of { tuples : Tuple.t list }
   | Filter of
@@ -66,15 +69,15 @@ let rec build_plan_table_expr reg grouped_predicates = function
   | Logical_plan.Table { name; alias } ->
     let predicates = Hashtbl.find grouped_predicates alias in
     (match Table_registry.get_table reg name with
-     | Packed_dbfile.TableFile file ->
-       let (Packed_dbfile.PackedTable (m, f)) = file in
+     | Db_file.TableFile file ->
+       let (Db_file.PackedTable (m, f)) = file in
        let module M = (val m) in
        let pp =
          make_pp (Tuple_desc.from_table_schema (M.schema f) alias) @@ SeqScan { file }
        in
        build_plan_predicates pp alias predicates
-     | Packed_dbfile.IndexFile file ->
-       let (Packed_dbfile.PackedIndex (m, f)) = file in
+     | Db_file.IndexFile file ->
+       let (Db_file.PackedIndex (m, f)) = file in
        let module M = (val m) in
        let index_key = M.key_info f in
        let index_predicates, other_predicates =
@@ -117,19 +120,19 @@ let build_plan reg logical_plan =
              make_pp
                Tuple_desc.dummy
                (Const { tuples = List.map Tuple.trans_tuple tuples })
-         ; file = Packed_dbfile.to_table_file file
+         ; file = Db_file.to_table_file file
          })
 ;;
 
 let rec execute_plan' tid pp =
   match pp with
-  | SeqScan { file = Packed_dbfile.PackedTable (m, f) } ->
+  | SeqScan { file = Db_file.PackedTable (m, f) } ->
     let module M = (val m) in
     M.scan_file f tid
-  | RangeScan { file = Packed_dbfile.PackedIndex (m, f); interval } ->
+  | RangeScan { file = Db_file.PackedIndex (m, f); interval } ->
     let module M = (val m) in
     M.range_scan f interval tid
-  | Insert { child; file = Packed_dbfile.PackedTable (m, f) } ->
+  | Insert { child; file = Db_file.PackedTable (m, f) } ->
     let module M = (val m) in
     Seq.iter (fun t -> M.insert_tuple f t tid) (execute_plan tid child);
     Seq.empty

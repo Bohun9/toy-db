@@ -1,4 +1,6 @@
-type t = { tables : (string, Packed_dbfile.t) Hashtbl.t }
+open Core
+
+type t = { tables : (string, Db_file.t) Hashtbl.t }
 
 let create n = { tables = Hashtbl.create n }
 

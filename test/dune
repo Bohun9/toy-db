@@ -1,22 +1,22 @@
 (library
  (name test_utils)
  (modules test_utils)
- (libraries toydb ounit2))
+ (libraries ounit2 core metadata storage toydb))
 
 (test
  (name test_heap_file)
  (modules test_heap_file)
- (libraries toydb ounit2 test_utils))
+ (libraries ounit2 test_utils storage))
 
 (test
  (name test_btree_file)
  (modules test_btree_file)
- (libraries toydb ounit2 test_utils))
+ (libraries ounit2 test_utils storage toydb ))
 
 (test
  (name test_transaction)
  (modules test_transaction)
- (libraries toydb ounit2 domainslib test_utils))
+ (libraries toydb ounit2 domainslib test_utils storage))
 
 (test
  (name test_catalog)

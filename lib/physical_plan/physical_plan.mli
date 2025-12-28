@@ -1,3 +1,6 @@
+open Core
+open Metadata
+
 type t
 
 val build_plan : Table_registry.t -> Logical_plan.t -> t
