@@ -1,4 +1,9 @@
-type relop = Eq
+type relop =
+  | Eq
+  | Le
+  | Lt
+  | Ge
+  | Gt
 
 type field_name =
   | PureFieldName of string
@@ -52,8 +57,13 @@ type stmt =
       ; tuples : tuple list
       }
 
+type table_schema =
+  { columns : Table_schema.column_data list
+  ; primary_key : string option
+  }
+
 type ddl =
-  | CreateTable of string * Table_schema.t
+  | CreateTable of string * table_schema
   | DropTable of string
 
 type sql =

@@ -10,8 +10,7 @@ let test_insert _ =
       let shuffled = U.shuffle sorted in
       List.iter (fun t -> Btree_file.insert_tuple bt t tid) shuffled;
       let tuples =
-        List.of_seq
-          (Btree_file.range_scan bt (Value.VInt Int.min_int) (Value.VInt Int.max_int) tid)
+        List.of_seq (Btree_file.range_scan bt (Value_interval.unbounded Type.TInt) tid)
       in
       U.assert_int_eq num_tuples (List.length tuples);
       List.iter2 U.assert_tuple_eq sorted tuples))
@@ -30,8 +29,7 @@ let test_delete _ =
       let remaining_sorted = List.sort compare remaining in
       List.iter (fun t -> Btree_file.delete_tuple bt t tid) deletions;
       let tuples =
-        List.of_seq
-          (Btree_file.range_scan bt (Value.VInt Int.min_int) (Value.VInt Int.max_int) tid)
+        List.of_seq (Btree_file.range_scan bt (Value_interval.unbounded TInt) tid)
       in
       U.assert_int_eq (num_tuples - num_deletions) (List.length tuples);
       List.iter2 U.assert_tuple_eq remaining_sorted tuples))

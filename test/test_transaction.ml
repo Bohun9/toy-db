@@ -12,7 +12,7 @@ let read_counter hf tid =
 
 let rec do_transaction task_id hf bp =
   try
-    Buffer_pool.with_tid bp (fun tid ->
+    U.with_tid bp (fun tid ->
       Log.log_tid tid "starting transaction for task %d" task_id;
       let n, rid = read_counter hf tid in
       Heap_file.delete_tuple hf rid tid;

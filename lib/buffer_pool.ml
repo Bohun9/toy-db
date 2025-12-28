@@ -21,18 +21,18 @@ let create max_pages lock_manager =
 let flush_commited_changes bp tid =
   List.iter
     (fun page_key ->
-      match Hashtbl.find_opt bp.cache page_key with
-      | Some pinfo when Db_page.is_dirty pinfo.page -> pinfo.flush_page pinfo.page
-      | _ -> ())
+       match Hashtbl.find_opt bp.cache page_key with
+       | Some pinfo when Db_page.is_dirty pinfo.page -> pinfo.flush_page pinfo.page
+       | _ -> ())
     (Lock_manager.get_locked_pages_list bp.lock_manager tid)
 ;;
 
 let discard_aborted_changes bp tid =
   List.iter
     (fun page_key ->
-      match Hashtbl.find_opt bp.cache page_key with
-      | Some pinfo when Db_page.is_dirty pinfo.page -> Hashtbl.remove bp.cache page_key
-      | _ -> ())
+       match Hashtbl.find_opt bp.cache page_key with
+       | Some pinfo when Db_page.is_dirty pinfo.page -> Hashtbl.remove bp.cache page_key
+       | _ -> ())
     (Lock_manager.get_locked_pages_list bp.lock_manager tid)
 ;;
 
@@ -42,14 +42,6 @@ let commit_transaction bp tid =
   Lock_manager.protect bp.lock_manager (fun () ->
     Mutex.protect bp.cache_mutex (fun () -> flush_commited_changes bp tid);
     Lock_manager.release_locks bp.lock_manager tid)
-;;
-
-let with_tid bp f =
-  let tid = Transaction_id.fresh_tid () in
-  begin_transaction bp tid;
-  let r = f tid in
-  commit_transaction bp tid;
-  r
 ;;
 
 let abort_transaction_locked bp tid () =

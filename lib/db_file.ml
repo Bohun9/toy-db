@@ -81,6 +81,7 @@ let deserialize_tuple c schema page_no slot_idx : Tuple.t =
 module type TABLE_FILE = sig
   type t
 
+  val file_path : t -> string
   val insert_tuple : t -> Tuple.t -> Transaction_id.t -> unit
   val scan_file : t -> Transaction_id.t -> Tuple.t Seq.t
   val schema : t -> Table_schema.t
@@ -89,5 +90,6 @@ end
 module type INDEX_FILE = sig
   include TABLE_FILE
 
-  val range_scan : t -> Value.t -> Value.t -> Transaction_id.t -> Tuple.t Seq.t
+  val key_info : t -> Table_schema.column_data
+  val range_scan : t -> Value_interval.t -> Transaction_id.t -> Tuple.t Seq.t
 end

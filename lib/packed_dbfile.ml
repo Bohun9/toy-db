@@ -20,3 +20,9 @@ let schema f =
   let module M = (val m) in
   M.schema f
 ;;
+
+let file_path f =
+  let (PackedTable (m, f)) = to_table_file f in
+  let module M = (val m) in
+  M.file_path f
+;;

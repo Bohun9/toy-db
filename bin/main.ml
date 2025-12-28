@@ -36,8 +36,10 @@ let rec loop tid =
           printf "Parse error at (%d,%d): unexpected token '%s'\n" line col tok
         | Error.Unbound_alias_name _ -> printf "unbound alias name"
         | Error.Duplicate_alias _ -> printf "duplicate alias"
+        | Error.Duplicate_column -> printf "duplicate column"
         | Error.Unknown_column _ -> printf "unknown column"
         | Error.Ambiguous_column _ -> printf "ambiguous column"
+        | Error.Invalid_primary_key -> printf "invalid primary key"
         | Error.Table_not_found -> printf "Table not found\n"
         | Error.Table_already_exists -> printf "Table already exists\n"
         | Error.Type_mismatch -> printf "Type mismatch\n"

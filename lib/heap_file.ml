@@ -7,6 +7,7 @@ type t =
   ; num_pages : int Atomic.t
   }
 
+let file_path f = f.file
 let num_pages hf = Atomic.get hf.num_pages
 let incr_num_pages hf = Atomic.incr hf.num_pages
 let page_key hf page_no = Page_key.PageKey { file = hf.file; page_no }

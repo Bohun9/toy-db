@@ -74,7 +74,7 @@ let split_at i xs = List.take i xs, List.drop i xs
 let insert_tuple (p : t) t =
   let k = get_key p t in
   let new_tuples =
-    match List.find_index (fun t -> Value.value_lt k (get_key p t)) (tuples p) with
+    match List.find_index (fun t -> Value.eval_lt k (get_key p t)) (tuples p) with
     | Some i ->
       let l, r = split_at i (tuples p) in
       l @ (t :: r)

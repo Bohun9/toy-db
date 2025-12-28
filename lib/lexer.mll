@@ -15,6 +15,8 @@ let kw_map = [
   "INSERT", INSERT;
   "INTO", INTO;
   "VALUES", VALUES;
+  "PRIMARY", PRIMARY;
+  "KEY", KEY;
 ] |> List.to_seq |> Hashtbl.of_seq
 
 let symbols_map = [

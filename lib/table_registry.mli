@@ -7,3 +7,4 @@ val get_table : t -> string -> Packed_dbfile.t
 val get_table_opt : t -> string -> Packed_dbfile.t option
 val has_table : t -> string -> bool
 val get_table_names : t -> string list
+val get_tables : t -> (string * Packed_dbfile.t) list

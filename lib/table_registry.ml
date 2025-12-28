@@ -18,3 +18,4 @@ let get_table_opt reg = Hashtbl.find_opt reg.tables
 let get_table reg = Hashtbl.find reg.tables
 let has_table reg name = Hashtbl.mem reg.tables name
 let get_table_names reg = Hashtbl.to_seq_keys reg.tables |> List.of_seq
+let get_tables reg = Hashtbl.to_seq reg.tables |> List.of_seq

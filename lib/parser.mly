@@ -10,7 +10,7 @@ open Syntax
 %token <int> INT_LIT
 %token <string> STRING_LIT
 
-%token SELECT FROM WHERE AND JOIN ON CREATE TABLE INSERT INTO VALUES
+%token SELECT FROM WHERE AND JOIN ON CREATE TABLE INSERT INTO VALUES PRIMARY KEY
 %token INT STRING
 
 %token STAR EQ DOT COMMA LPAREN RPAREN
@@ -58,8 +58,12 @@ col_type
 col_data
   : ID col_type { { Table_schema.name = $1; typ = $2 } }
 
+table_primary_key
+  : /* empty */                      { None }
+  | DOT PRIMARY KEY LPAREN ID RPAREN { Some $5 } 
+
 table_schema
-  : separated_list(COMMA, col_data) { $1 }
+  : separated_list(COMMA, col_data) table_primary_key { { Syntax.columns = $1; primary_key = $2 } }
 
 ddl
   : CREATE TABLE ID LPAREN table_schema RPAREN { CreateTable($3, $5) }

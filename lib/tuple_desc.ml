@@ -11,7 +11,7 @@ let from_table_schema schema alias =
   List.map
     (fun ({ name; typ } : Table_schema.column_data) ->
        { table_alias = alias; column = name; typ })
-    schema
+    (Table_schema.columns schema)
 ;;
 
 let dummy = []

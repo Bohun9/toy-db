@@ -36,7 +36,7 @@ let create page_no parent keys children =
 ;;
 
 let find_child p k =
-  match List.find_index (Value.value_lt k) (keys p) with
+  match List.find_index (Value.eval_lt k) (keys p) with
   | Some i -> List.nth (children p) i
   | None -> List.nth (children p) (List.length (keys p))
 ;;
@@ -84,7 +84,7 @@ let delete_at i xs = List.take i xs @ List.drop (i + 1) xs
 
 let insert_entry p k child =
   let index =
-    match List.find_index (Value.value_lt k) (keys p) with
+    match List.find_index (Value.eval_lt k) (keys p) with
     | Some i -> i
     | None -> List.length (keys p)
   in

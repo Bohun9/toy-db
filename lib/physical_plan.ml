@@ -10,6 +10,10 @@ let eval_expr e t =
 
 type physical_plan_data =
   | SeqScan of { file : Packed_dbfile.table_file }
+  | RangeScan of
+      { file : Packed_dbfile.index_file
+      ; interval : Value_interval.t
+      }
   | Insert of
       { child : t
       ; file : Packed_dbfile.table_file
@@ -35,31 +39,6 @@ and t =
 
 let make_pp desc plan = { desc; plan }
 
-let rec build_plan_table_expr reg = function
-  | Logical_plan.Table { name; alias } ->
-    (match Table_registry.get_table reg name with
-     | Packed_dbfile.TableFile file ->
-       let (Packed_dbfile.PackedTable (m, f)) = file in
-       let module M = (val m) in
-       make_pp (Tuple_desc.from_table_schema (M.schema f) alias) @@ SeqScan { file }
-     | Packed_dbfile.IndexFile file ->
-       let (Packed_dbfile.PackedIndex (m, f)) = file in
-       let module M = (val m) in
-       failwith "internal error")
-  | Logical_plan.Join { tab1; tab2; field1; field2 } ->
-    let pp1 = build_plan_table_expr reg tab1 in
-    let pp2 = build_plan_table_expr reg tab2 in
-    let field_index1 = Tuple_desc.field_index pp1.desc field1 in
-    let field_index2 = Tuple_desc.field_index pp2.desc field2 in
-    make_pp (Tuple_desc.combine pp1.desc pp2.desc)
-    @@ Join
-         { child1 = pp1
-         ; child2 = pp2
-         ; e1 = EAttributeFetch field_index1
-         ; e2 = EAttributeFetch field_index2
-         }
-;;
-
 let build_plan_predicate pp alias ({ column; op; value } : Logical_plan.predicate) =
   let field_index = Tuple_desc.field_index pp.desc { table_alias = alias; column } in
   make_pp pp.desc
@@ -71,16 +50,64 @@ let build_plan_predicate pp alias ({ column; op; value } : Logical_plan.predicat
        }
 ;;
 
-let build_plan_predicates pp (alias, preds) =
+let build_plan_predicates pp alias preds =
   List.fold_left (fun acc pred -> build_plan_predicate pp alias pred) pp preds
+;;
+
+let index_interval_from_predicates predicates key_type =
+  List.fold_left
+    (fun acc ({ op; value; _ } : Logical_plan.predicate) ->
+       Value_interval.constrain acc op (Value.trans value))
+    (Value_interval.unbounded key_type)
+    predicates
+;;
+
+let rec build_plan_table_expr reg grouped_predicates = function
+  | Logical_plan.Table { name; alias } ->
+    let predicates = Hashtbl.find grouped_predicates alias in
+    (match Table_registry.get_table reg name with
+     | Packed_dbfile.TableFile file ->
+       let (Packed_dbfile.PackedTable (m, f)) = file in
+       let module M = (val m) in
+       let pp =
+         make_pp (Tuple_desc.from_table_schema (M.schema f) alias) @@ SeqScan { file }
+       in
+       build_plan_predicates pp alias predicates
+     | Packed_dbfile.IndexFile file ->
+       let (Packed_dbfile.PackedIndex (m, f)) = file in
+       let module M = (val m) in
+       let index_key = M.key_info f in
+       let index_predicates, other_predicates =
+         List.partition
+           (fun ({ column; _ } : Logical_plan.predicate) -> index_key.name = column)
+           predicates
+       in
+       let index_interval =
+         index_interval_from_predicates index_predicates index_key.typ
+       in
+       let pp =
+         make_pp (Tuple_desc.from_table_schema (M.schema f) alias)
+         @@ RangeScan { file; interval = index_interval }
+       in
+       build_plan_predicates pp alias other_predicates)
+  | Logical_plan.Join { tab1; tab2; field1; field2 } ->
+    let pp1 = build_plan_table_expr reg grouped_predicates tab1 in
+    let pp2 = build_plan_table_expr reg grouped_predicates tab2 in
+    let field_index1 = Tuple_desc.field_index pp1.desc field1 in
+    let field_index2 = Tuple_desc.field_index pp2.desc field2 in
+    make_pp (Tuple_desc.combine pp1.desc pp2.desc)
+    @@ Join
+         { child1 = pp1
+         ; child2 = pp2
+         ; e1 = EAttributeFetch field_index1
+         ; e2 = EAttributeFetch field_index2
+         }
 ;;
 
 let build_plan reg logical_plan =
   match logical_plan with
   | Logical_plan.Select { table_expr; predicates } ->
-    let pp = build_plan_table_expr reg table_expr in
-    let predicates = predicates |> Hashtbl.to_seq |> List.of_seq in
-    List.fold_left build_plan_predicates pp predicates
+    build_plan_table_expr reg predicates table_expr
   | Logical_plan.InsertValues { table; tuples } ->
     let file = Table_registry.get_table reg table in
     make_pp
@@ -99,6 +126,9 @@ let rec execute_plan' tid pp =
   | SeqScan { file = Packed_dbfile.PackedTable (m, f) } ->
     let module M = (val m) in
     M.scan_file f tid
+  | RangeScan { file = Packed_dbfile.PackedIndex (m, f); interval } ->
+    let module M = (val m) in
+    M.range_scan f interval tid
   | Insert { child; file = Packed_dbfile.PackedTable (m, f) } ->
     let module M = (val m) in
     Seq.iter (fun t -> M.insert_tuple f t tid) (execute_plan tid child);
@@ -109,7 +139,7 @@ let rec execute_plan' tid pp =
       (fun t ->
          let v1 = eval_expr e1 t in
          let v2 = eval_expr e2 t in
-         Value.value_eval_relop v1 op v2)
+         Value.eval_relop v1 op v2)
       (execute_plan tid child)
   | Join { child1; child2; e1; e2 } ->
     fun () ->

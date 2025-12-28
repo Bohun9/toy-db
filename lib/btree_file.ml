@@ -6,6 +6,7 @@ type t =
   ; key_field : int
   }
 
+let file_path f = f.file
 let page_key f page_no = Page_key.PageKey { file = f.file; page_no }
 let get_key f t = Tuple.field t f.key_field
 let fresh_page_no f = Atomic.fetch_and_add f.num_pages 1
@@ -312,13 +313,16 @@ let delete_tuple f t tid =
         (Btree_leaf_page.lowest_key sibling.leaf))
 ;;
 
-let range_scan f lb ub tid =
-  let leaf = find_leaf f lb tid Lock_manager.ReadPerm in
-  let lp t = Value.value_lt lb (get_key f t) in
-  let up t = Value.value_lt (get_key f t) ub in
+let range_scan f interval tid =
+  Log.log "hello from range_scan";
+  let leaf =
+    find_leaf f (Value_interval.left_endpoint interval) tid Lock_manager.ReadPerm
+  in
   let rec scan_from_leaf leaf =
     Seq.append
-      (Seq.filter (fun t -> lp t && up t) (Btree_leaf_page.scan_page leaf))
+      (Seq.filter
+         (fun t -> Value_interval.inside interval (get_key f t))
+         (Btree_leaf_page.scan_page leaf))
       (fun () ->
          match Btree_leaf_page.next_leaf_page leaf with
          | Some next_page_no ->
@@ -326,5 +330,10 @@ let range_scan f lb ub tid =
            scan_from_leaf next_leaf ()
          | None -> Seq.Nil)
   in
-  Seq.take_while up (scan_from_leaf leaf)
+  Seq.take_while
+    (fun t -> Value_interval.satisfies_upper_bound interval (get_key f t))
+    (scan_from_leaf leaf)
 ;;
+
+let key_info f = List.nth (Table_schema.columns f.schema) f.key_field
+let scan_file f tid = range_scan f (Value_interval.unbounded (key_info f).typ) tid
