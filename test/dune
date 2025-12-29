@@ -22,3 +22,8 @@
  (name test_catalog)
  (modules test_catalog)
  (libraries toydb ounit2 test_utils))
+
+(test
+ (name test_sql)
+ (modules test_sql)
+ (libraries toydb ounit2 test_utils))

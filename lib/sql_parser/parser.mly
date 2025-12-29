@@ -11,7 +11,8 @@ open Syntax
 %token <int> INT_LIT
 %token <string> STRING_LIT
 
-%token SELECT FROM WHERE AND JOIN ON CREATE TABLE INSERT INTO VALUES PRIMARY KEY
+%token SELECT FROM WHERE AND JOIN ON CREATE TABLE INSERT INTO VALUES PRIMARY KEY GROUP BY AS
+%token COUNT SUM AVG MIN MAX
 %token INT STRING
 
 %token STAR EQ DOT COMMA LPAREN RPAREN
@@ -34,23 +35,39 @@ tuple
 tuples
   : separated_list(COMMA, tuple) { $1 }
 
-select_exprs
-  : STAR { Star }
+aggregate
+  : COUNT { Count }
+  | SUM   { Sum }
+  | AVG   { Avg }
+  | MAX   { Max }
+  | MIN   { Min }
+
+select_item
+  : field                               { SelectField { field = $1 } }
+  | aggregate LPAREN field RPAREN AS ID { SelectAggregate { agg_kind = $1; field = $3; name = $6 } }
+
+select_list
+  : STAR                               { Star }
+  | separated_list(COMMA, select_item) { SelectList $1 }
 
 table_expr 
-  : ID { Table { name = $1; alias = None } }
+  : ID                                           { Table { name = $1; alias = None } }
   | table_expr JOIN table_expr ON field EQ field { Join { tab1 = $1; tab2 = $3; field1 = $5; field2 = $7 } }
 
 predicate
   : field relop value { { field = $1; op = $2; value = $3 } }
 
 where_clause
-  : /* empty */ { [] }
+  : /* empty */                          { [] }
   | WHERE separated_list(AND, predicate) { $2 }
 
+group_by_clause
+  : /* empty */                           { None }
+  | GROUP BY separated_list(COMMA, field) { Some { group_by_fields = $3 } }
+
 stmt
-  : SELECT select_exprs FROM table_expr where_clause { Select { exprs = $2; table_expr = $4; predicates = $5 } }
-  | INSERT INTO ID VALUES tuples                     { InsertValues { table = $3; tuples = $5 } }
+  : SELECT select_list FROM table_expr where_clause group_by_clause { Select { select_list = $2; table_expr = $4; predicates = $5; group_by = $6 } }
+  | INSERT INTO ID VALUES tuples                                    { InsertValues { table = $3; tuples = $5 } }
 
 col_type
   : INT    { Type.TInt }

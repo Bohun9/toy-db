@@ -1,10 +1,6 @@
 open Core
 open Metadata
-
-type resolved_field =
-  { table_alias : string
-  ; column : string
-  }
+module Table_field = Table_field
 
 type table_expr =
   | Table of
@@ -14,20 +10,44 @@ type table_expr =
   | Join of
       { tab1 : table_expr
       ; tab2 : table_expr
-      ; field1 : resolved_field
-      ; field2 : resolved_field
+      ; field1 : Table_field.t
+      ; field2 : Table_field.t
       }
 
 type predicate =
-  { column : string
+  { field : Table_field.t
   ; op : Syntax.relop
   ; value : Syntax.value
   }
+
+type select_list =
+  | Star
+  | SelectFields of Table_field.t list
+
+type group_by_select_item =
+  | SelectField of
+      { field : Table_field.t
+      ; group_by_index : int
+      }
+  | SelectAggregate of
+      { agg_kind : Syntax.aggregate_kind
+      ; field : Table_field.t
+      ; name : string
+      ; result_type : Type.t
+      }
+
+type grouping =
+  | NoGrouping of { select_list : select_list }
+  | Grouping of
+      { select_list : group_by_select_item list
+      ; group_by_fields : Table_field.t list
+      }
 
 type t =
   | Select of
       { table_expr : table_expr
       ; predicates : (string, predicate list) Hashtbl.t
+      ; grouping : grouping
       }
   | InsertValues of
       { table : string

@@ -13,6 +13,9 @@ let derive_type = function
   | VString _ -> Type.TString
 ;;
 
+let min = min
+let max = max
+
 let eval_relop v1 op v2 =
   match op with
   | Syntax.Eq -> v1 = v2

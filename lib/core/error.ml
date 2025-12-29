@@ -4,6 +4,7 @@ type db_error =
       ; col : int
       ; tok : string
       }
+  | Aggregate_without_grouping
   | Unbound_alias_name of { alias : string }
   | Duplicate_alias of { alias : string }
   | Duplicate_column
@@ -19,6 +20,7 @@ type db_error =
 exception DBError of db_error
 
 let parser_error line col tok = DBError (Parser_error { line; col; tok })
+let aggregate_without_grouping = DBError Aggregate_without_grouping
 let unbound_alias_name alias = DBError (Unbound_alias_name { alias })
 let duplicate_alias alias = DBError (Duplicate_alias { alias })
 let duplicate_column = DBError Duplicate_column

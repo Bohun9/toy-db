@@ -54,6 +54,13 @@ let with_catalog dir f =
   f cat
 ;;
 
+let with_temp_catalog f =
+  with_temp_dir "temp_db_catalog_" "" (fun dir ->
+    with_catalog dir (fun cat ->
+      f cat;
+      Catalog.delete_db_files cat))
+;;
+
 let with_temp_heap_file schema f =
   with_temp_file "temp_heap_file_" ".tbl" (fun temp_file ->
     let bp = create_buf_pool 4 in

@@ -26,7 +26,24 @@ let derive_value_type = function
 
 let derive_tuple_type = List.map derive_value_type
 
-type select_exprs = Star
+type aggregate_kind =
+  | Count
+  | Sum
+  | Avg
+  | Min
+  | Max
+
+type select_item =
+  | SelectField of { field : field_name }
+  | SelectAggregate of
+      { agg_kind : aggregate_kind
+      ; field : field_name
+      ; name : string
+      }
+
+type select_list =
+  | Star
+  | SelectList of select_item list
 
 type table_expr =
   | Table of
@@ -46,11 +63,14 @@ type predicate =
   ; value : value
   }
 
+type group_by = { group_by_fields : field_name list }
+
 type stmt =
   | Select of
-      { exprs : select_exprs
+      { select_list : select_list
       ; table_expr : table_expr
       ; predicates : predicate list
+      ; group_by : group_by option
       }
   | InsertValues of
       { table : string

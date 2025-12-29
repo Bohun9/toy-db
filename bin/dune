@@ -1,4 +1,5 @@
 (executable
  (public_name toydb)
  (name main)
- (libraries toydb core metadata))
+ (libraries toydb core metadata)
+ (flags (:standard -w -8-26-27-32-37-69)))

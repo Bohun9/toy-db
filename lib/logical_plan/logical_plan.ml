@@ -1,10 +1,6 @@
 open Core
 open Metadata
-
-type resolved_field =
-  { table_alias : string
-  ; column : string
-  }
+module Table_field = Table_field
 
 type table_expr =
   | Table of
@@ -14,78 +10,58 @@ type table_expr =
   | Join of
       { tab1 : table_expr
       ; tab2 : table_expr
-      ; field1 : resolved_field
-      ; field2 : resolved_field
+      ; field1 : Table_field.t
+      ; field2 : Table_field.t
       }
 
 type predicate =
-  { column : string
+  { field : Table_field.t
   ; op : Syntax.relop
   ; value : Syntax.value
   }
+
+type select_list =
+  | Star
+  | SelectFields of Table_field.t list
+
+type group_by_select_item =
+  | SelectField of
+      { field : Table_field.t
+      ; group_by_index : int
+      }
+  | SelectAggregate of
+      { agg_kind : Syntax.aggregate_kind
+      ; field : Table_field.t
+      ; name : string
+      ; result_type : Type.t
+      }
+
+type grouping =
+  | NoGrouping of { select_list : select_list }
+  | Grouping of
+      { select_list : group_by_select_item list
+      ; group_by_fields : Table_field.t list
+      }
 
 type t =
   | Select of
       { table_expr : table_expr
       ; predicates : (string, predicate list) Hashtbl.t
+      ; grouping : grouping
       }
   | InsertValues of
       { table : string
       ; tuples : Syntax.tuple list
       }
 
-module type ENV = sig
-  type t
-
-  val empty : t
-  val extend : string -> Table_schema.t -> t -> t
-  val merge : t -> t -> t
-  val resolve_field : t -> Syntax.field_name -> resolved_field * Type.t
-  val alias_names : t -> string list
-end
-
-module Env : ENV = struct
-  module StringMap = Map.Make (String)
-
-  type t = Table_schema.t StringMap.t
-
-  let empty = StringMap.empty
-
-  let extend alias sch env =
-    match StringMap.find_opt alias env with
-    | Some _ -> raise @@ Error.duplicate_alias alias
-    | None -> StringMap.add alias sch env
-  ;;
-
-  let merge = StringMap.fold extend
-
-  let resolve_pure_field env column =
-    env
-    |> StringMap.bindings
-    |> List.filter_map (fun (alias, sch) ->
-      Option.map
-        (fun ({ typ; _ } : Table_schema.column_data) ->
-           { table_alias = alias; column }, typ)
-        (Table_schema.find_column sch column))
-  ;;
-
-  let resolve_field env = function
-    | Syntax.PureFieldName column ->
-      (match resolve_pure_field env column with
-       | [] -> raise @@ Error.unknown_column column
-       | [ resolved_field ] -> resolved_field
-       | _ -> raise @@ Error.ambiguous_column column)
-    | Syntax.QualifiedFieldName { alias; column } ->
-      (match StringMap.find_opt alias env with
-       | Some sch ->
-         (match Table_schema.find_column sch column with
-          | Some { typ; _ } -> { table_alias = alias; column }, typ
-          | None -> raise @@ Error.unknown_column column)
-       | None -> raise @@ Error.unbound_alias_name alias)
-  ;;
-
-  let alias_names env = env |> StringMap.bindings |> List.map fst
-end
+let agg_result_type agg_kind input_type =
+  match agg_kind with
+  | Core.Syntax.Count -> Core.Type.TInt
+  | Core.Syntax.Sum -> Core.Type.TInt
+  | Core.Syntax.Avg -> Core.Type.TInt
+  | Core.Syntax.Min -> input_type
+  | Core.Syntax.Max -> input_type
+;;
 
 let require_same_type t1 t2 = if t1 <> t2 then raise Error.type_mismatch
 
@@ -101,31 +77,81 @@ let rec check_table_expr reg = function
   | Syntax.Table { name; alias } ->
     let sch = get_table_schema reg name in
     let alias = Option.value alias ~default:name in
-    Table { name; alias }, Env.extend alias sch Env.empty
-  | Syntax.Join { tab1; tab2; field1; field2 } ->
+    Table { name; alias }, Table_env.extend Table_env.empty alias sch
+  | Syntax.Join { tab1; tab2; field1 = field_name1; field2 = field_name2 } ->
     let tab1, env1 = check_table_expr reg tab1 in
     let tab2, env2 = check_table_expr reg tab2 in
-    let rfield1, t1 = Env.resolve_field env1 field1 in
-    let rfield2, t2 = Env.resolve_field env2 field2 in
-    require_same_type t1 t2;
-    Join { tab1; tab2; field1 = rfield1; field2 = rfield2 }, Env.merge env1 env2
+    let field1 = Table_env.resolve_field env1 field_name1 in
+    let field2 = Table_env.resolve_field env2 field_name2 in
+    require_same_type field1.typ field2.typ;
+    Join { tab1; tab2; field1; field2 }, Table_env.merge env1 env2
 ;;
 
 let build_plan reg = function
-  | Syntax.Select { table_expr; predicates; _ } ->
+  | Syntax.Select { select_list; table_expr; predicates; group_by } ->
     let table_expr, env = check_table_expr reg table_expr in
     let grouped_predicates = Hashtbl.create 16 in
-    List.iter (fun alias -> Hashtbl.add grouped_predicates alias []) (Env.alias_names env);
     List.iter
-      (fun ({ field; op; value } : Syntax.predicate) ->
-         let { table_alias; column }, t = Env.resolve_field env field in
-         require_same_type t (Syntax.derive_value_type value);
+      (fun alias -> Hashtbl.add grouped_predicates alias [])
+      (Table_env.alias_names env);
+    List.iter
+      (fun ({ field = field_name; op; value } : Syntax.predicate) ->
+         let field = Table_env.resolve_field env field_name in
+         require_same_type field.typ (Syntax.derive_value_type value);
          Hashtbl.replace
            grouped_predicates
-           table_alias
-           ({ column; op; value } :: Hashtbl.find grouped_predicates table_alias))
+           field.table_alias
+           ({ field; op; value } :: Hashtbl.find grouped_predicates field.table_alias))
       predicates;
-    Select { table_expr; predicates = grouped_predicates }
+    (match group_by with
+     | None ->
+       let select_list =
+         match select_list with
+         | Syntax.Star -> Star
+         | Syntax.SelectList select_list ->
+           SelectFields
+             (List.map
+                (fun select_item ->
+                   match select_item with
+                   | Syntax.SelectField { field } -> Table_env.resolve_field env field
+                   | Syntax.SelectAggregate _ -> raise Error.aggregate_without_grouping)
+                select_list)
+       in
+       Select
+         { table_expr
+         ; predicates = grouped_predicates
+         ; grouping = NoGrouping { select_list }
+         }
+     | Some { group_by_fields } ->
+       let group_by_fields = List.map (Table_env.resolve_field env) group_by_fields in
+       let group_by_seq = Table_field.Seq.from_list group_by_fields in
+       let select_list =
+         match select_list with
+         | Syntax.Star -> failwith "star with grouping"
+         | Syntax.SelectList select_list ->
+           List.map
+             (fun select_item ->
+                match select_item with
+                | Syntax.SelectField { field } ->
+                  let group_by_index, field =
+                    Table_field.Seq.resolve_field group_by_seq field
+                  in
+                  SelectField { field; group_by_index }
+                | Syntax.SelectAggregate { agg_kind; field = field_name; name } ->
+                  let field = Table_env.resolve_field env field_name in
+                  SelectAggregate
+                    { agg_kind
+                    ; field
+                    ; name
+                    ; result_type = agg_result_type agg_kind field.typ
+                    })
+             select_list
+       in
+       Select
+         { table_expr
+         ; predicates = grouped_predicates
+         ; grouping = Grouping { select_list; group_by_fields }
+         })
   | Syntax.InsertValues { table; tuples } ->
     let sch = get_table_schema reg table in
     let tuple_types = List.map Syntax.derive_tuple_type tuples in
