@@ -60,7 +60,6 @@ and select_stmt =
   ; order : order_item list option
   ; limit : int option
   ; offset : int option
-  ; select_list_fields : Field.t list
   }
 
 type t =
@@ -95,8 +94,8 @@ let rec check_table_expr reg = function
     let alias = Option.value alias ~default:name in
     Table { name; alias }, Table_env.extend_base Table_env.empty alias sch
   | Syntax.Subquery { select; alias } ->
-    let select = build_plan_select reg select in
-    let fields = List.map (Field.to_table_field alias) select.select_list_fields in
+    let select, select_list_fields = build_plan_select reg select in
+    let fields = List.map (Field.to_table_field alias) select_list_fields in
     Subquery { select; fields }, Table_env.extend_derived Table_env.empty alias fields
   | Syntax.Join { tab1; tab2; field1 = field_name1; field2 = field_name2 } ->
     let tab1, env1 = check_table_expr reg tab1 in
@@ -193,18 +192,12 @@ and build_plan_select
            order_list)
       order_by
   in
-  { table_expr
-  ; predicates = grouped_predicates
-  ; grouping
-  ; order
-  ; limit
-  ; offset
-  ; select_list_fields
-  }
+  ( { table_expr; predicates = grouped_predicates; grouping; order; limit; offset }
+  , select_list_fields )
 ;;
 
 let build_plan reg = function
-  | Syntax.Select select -> Select (build_plan_select reg select)
+  | Syntax.Select select -> Select (build_plan_select reg select |> fst)
   | Syntax.InsertValues { table; tuples } ->
     let sch = get_table_schema reg table in
     let tuple_types = List.map Syntax.derive_tuple_type tuples in

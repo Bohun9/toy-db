@@ -127,7 +127,7 @@ let rec build_plan_table_expr reg grouped_predicates = function
 
 and build_plan reg logical_plan =
   match logical_plan with
-  | Logical_plan.Select { table_expr; predicates; grouping; order; limit; offset; _ } ->
+  | Logical_plan.Select { table_expr; predicates; grouping; order; limit; offset } ->
     let table_expr_pp = build_plan_table_expr reg predicates table_expr in
     let grouping_pp =
       match grouping with

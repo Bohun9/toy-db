@@ -60,7 +60,6 @@ and select_stmt =
   ; order : order_item list option
   ; limit : int option
   ; offset : int option
-  ; select_list_fields : Field.t list
   }
 
 type t =
