@@ -43,5 +43,39 @@ let test_group_by _ =
       | Catalog.Nothing -> failwith "internal error"))
 ;;
 
-let suite = "sql" >::: [ "group_by" >:: test_group_by ]
+let test_order_by _ =
+  with_filled_catalog (fun cat ->
+    Catalog.with_tid cat (fun tid ->
+      let result =
+        Catalog.execute_sql
+          "SELECT * FROM letters ORDER BY name ASC, letters.quantity DESC"
+          cat
+          tid
+      in
+      match result with
+      | Catalog.Stream tuples ->
+        let tuples = List.of_seq tuples in
+        U.assert_int_eq 6 (List.length tuples);
+        U.assert_tuple_eq
+          T.{ values = [ V.VString "A"; V.VInt 2 ]; rid = None }
+          (List.nth tuples 0);
+        U.assert_tuple_eq
+          T.{ values = [ V.VString "A"; V.VInt 1 ]; rid = None }
+          (List.nth tuples 1);
+        U.assert_tuple_eq
+          T.{ values = [ V.VString "B"; V.VInt 4 ]; rid = None }
+          (List.nth tuples 2);
+        U.assert_tuple_eq
+          T.{ values = [ V.VString "B"; V.VInt 2 ]; rid = None }
+          (List.nth tuples 3);
+        U.assert_tuple_eq
+          T.{ values = [ V.VString "C"; V.VInt 5 ]; rid = None }
+          (List.nth tuples 4);
+        U.assert_tuple_eq
+          T.{ values = [ V.VString "C"; V.VInt 3 ]; rid = None }
+          (List.nth tuples 5)
+      | Catalog.Nothing -> failwith "internal error"))
+;;
+
+let suite = "sql" >::: [ "group_by" >:: test_group_by; "order_by" >:: test_order_by ]
 let () = run_test_tt_main suite

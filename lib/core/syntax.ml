@@ -65,12 +65,22 @@ type predicate =
 
 type group_by = { group_by_fields : field_name list }
 
+type order =
+  | Asc
+  | Desc
+
+type order_item =
+  { field : field_name
+  ; order : order option
+  }
+
 type stmt =
   | Select of
       { select_list : select_list
       ; table_expr : table_expr
       ; predicates : predicate list
       ; group_by : group_by option
+      ; order_by : order_item list option
       }
   | InsertValues of
       { table : string

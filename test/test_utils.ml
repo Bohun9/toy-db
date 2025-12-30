@@ -21,26 +21,12 @@ let assert_tuple_eq = OUnit2.assert_equal ~cmp:cmp_tuple ~printer:Tuple.show
 
 let with_temp_file prefix sufix f =
   let temp_file = Filename.temp_file prefix sufix in
-  try
-    let r = f temp_file in
-    Sys.remove temp_file;
-    r
-  with
-  | e ->
-    Sys.remove temp_file;
-    raise e
+  Fun.protect ~finally:(fun () -> Sys.remove temp_file) (fun () -> f temp_file)
 ;;
 
 let with_temp_dir prefix sufix f =
   let temp_dir = Filename.temp_dir prefix sufix in
-  try
-    let r = f temp_dir in
-    Sys.rmdir temp_dir;
-    r
-  with
-  | e ->
-    Sys.rmdir temp_dir;
-    raise e
+  Fun.protect ~finally:(fun () -> Sys.rmdir temp_dir) (fun () -> f temp_dir)
 ;;
 
 let create_buf_pool max_num_pages =
@@ -57,8 +43,7 @@ let with_catalog dir f =
 let with_temp_catalog f =
   with_temp_dir "temp_db_catalog_" "" (fun dir ->
     with_catalog dir (fun cat ->
-      f cat;
-      Catalog.delete_db_files cat))
+      Fun.protect ~finally:(fun () -> Catalog.delete_db_files cat) (fun () -> f cat)))
 ;;
 
 let with_temp_heap_file schema f =

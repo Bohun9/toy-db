@@ -1,5 +1,6 @@
 open Core
 open Metadata
+module Field = Field
 module Table_field = Table_field
 
 type table_expr =
@@ -43,11 +44,17 @@ type grouping =
       ; group_by_fields : Table_field.t list
       }
 
+type order_item =
+  { field : Field.t
+  ; order : Syntax.order
+  }
+
 type t =
   | Select of
       { table_expr : table_expr
       ; predicates : (string, predicate list) Hashtbl.t
       ; grouping : grouping
+      ; order : order_item list option
       }
   | InsertValues of
       { table : string

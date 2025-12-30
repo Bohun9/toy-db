@@ -11,8 +11,9 @@ open Syntax
 %token <int> INT_LIT
 %token <string> STRING_LIT
 
-%token SELECT FROM WHERE AND JOIN ON CREATE TABLE INSERT INTO VALUES PRIMARY KEY GROUP BY AS
+%token SELECT FROM WHERE AND JOIN ON CREATE TABLE INSERT INTO VALUES PRIMARY KEY GROUP BY AS ORDER
 %token COUNT SUM AVG MIN MAX
+%token ASC DESC
 %token INT STRING
 
 %token STAR EQ DOT COMMA LPAREN RPAREN
@@ -42,6 +43,13 @@ aggregate
   | MAX   { Max }
   | MIN   { Min }
 
+order
+  : ASC  { Asc }
+  | DESC { Desc }
+
+order_item
+  : field order? { { field = $1; order = $2 } }
+
 select_item
   : field                               { SelectField { field = $1 } }
   | aggregate LPAREN field RPAREN AS ID { SelectAggregate { agg_kind = $1; field = $3; name = $6 } }
@@ -65,9 +73,14 @@ group_by_clause
   : /* empty */                           { None }
   | GROUP BY separated_list(COMMA, field) { Some { group_by_fields = $3 } }
 
+order_by_clause
+  : /* empty */                                { None }
+  | ORDER BY separated_list(COMMA, order_item) { Some $3 }
+
 stmt
-  : SELECT select_list FROM table_expr where_clause group_by_clause { Select { select_list = $2; table_expr = $4; predicates = $5; group_by = $6 } }
-  | INSERT INTO ID VALUES tuples                                    { InsertValues { table = $3; tuples = $5 } }
+  : SELECT select_list FROM table_expr where_clause group_by_clause order_by_clause
+      { Select { select_list = $2; table_expr = $4; predicates = $5; group_by = $6; order_by = $7 } }
+  | INSERT INTO ID VALUES tuples { InsertValues { table = $3; tuples = $5 } }
 
 col_type
   : INT    { Type.TInt }

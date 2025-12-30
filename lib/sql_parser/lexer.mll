@@ -18,6 +18,7 @@ let kw_map = [
   "PRIMARY", PRIMARY;
   "KEY", KEY;
   "GROUP", GROUP;
+  "ORDER", ORDER;
   "BY", BY;
   "COUNT", COUNT;
   "SUM", SUM;
@@ -25,6 +26,8 @@ let kw_map = [
   "MIN", MIN;
   "MAX", MAX;
   "AS", AS;
+  "ASC", ASC;
+  "DESC", DESC;
 ] |> List.to_seq |> Hashtbl.of_seq
 
 let symbols_map = [

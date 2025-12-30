@@ -5,6 +5,11 @@ type grouper_output_item =
   | GrouperAttribute of { group_by_index : int }
   | GrouperAggregate
 
+type order_item =
+  { order_by_expr : Expr.t
+  ; order : Syntax.order
+  }
+
 type physical_plan_data =
   | SeqScan of { file : Db_file.table_file }
   | RangeScan of
@@ -38,6 +43,10 @@ type physical_plan_data =
       ; create_aggregates : unit -> Aggregate.t list
       ; output : grouper_output_item list
       }
+  | Sorter of
+      { child : t
+      ; order : order_item list
+      }
 
 and t =
   { desc : Tuple_desc.t
@@ -45,13 +54,13 @@ and t =
   }
 
 let make_pp desc plan = { desc; plan }
-let fields_to_exprs fs desc = List.map (fun f -> Expr.of_field f desc) fs
+let fields_to_exprs fs desc = List.map (fun f -> Expr.of_table_field f desc) fs
 
 let build_plan_predicate pp ({ field; op; value } : Logical_plan.predicate) =
   make_pp pp.desc
   @@ Filter
        { child = pp
-       ; e1 = Expr.of_field field pp.desc
+       ; e1 = Expr.of_table_field field pp.desc
        ; op
        ; e2 = EValue (Value.trans value)
        }
@@ -98,51 +107,73 @@ let rec build_plan_table_expr reg grouped_predicates = function
        in
        build_plan_predicates pp other_predicates)
   | Logical_plan.Join { tab1; tab2; field1; field2 } ->
-    let pp1 = build_plan_table_expr reg grouped_predicates tab1 in
-    let pp2 = build_plan_table_expr reg grouped_predicates tab2 in
-    let field_index1 = Tuple_desc.field_index pp1.desc field1 in
-    let field_index2 = Tuple_desc.field_index pp2.desc field2 in
-    make_pp (Tuple_desc.combine pp1.desc pp2.desc)
+    let child1 = build_plan_table_expr reg grouped_predicates tab1 in
+    let child2 = build_plan_table_expr reg grouped_predicates tab2 in
+    make_pp (Tuple_desc.combine child1.desc child2.desc)
     @@ Join
-         { child1 = pp1
-         ; child2 = pp2
-         ; e1 = EAttributeFetch field_index1
-         ; e2 = EAttributeFetch field_index2
+         { child1
+         ; child2
+         ; e1 = Expr.of_table_field field1 child1.desc
+         ; e2 = Expr.of_table_field field2 child2.desc
          }
 ;;
 
 let build_plan reg logical_plan =
   match logical_plan with
-  | Logical_plan.Select { table_expr; predicates; grouping } ->
-    let child = build_plan_table_expr reg predicates table_expr in
-    (match grouping with
-     | Logical_plan.NoGrouping { select_list = Logical_plan.Star } -> child
-     | Logical_plan.NoGrouping { select_list = Logical_plan.SelectFields select_fields }
-       ->
-       make_pp (Tuple_desc.from_table_fields select_fields)
-       @@ Project { child; exprs = fields_to_exprs select_fields child.desc }
-     | Logical_plan.Grouping { select_list; group_by_fields } ->
-       let group_by_exprs = fields_to_exprs group_by_fields child.desc in
-       let create_aggregates () =
-         List.filter_map
-           (fun select_item ->
-              match select_item with
-              | Logical_plan.SelectAggregate { agg_kind; field; _ } ->
-                Some (Aggregate.empty agg_kind field.typ (Expr.of_field field child.desc))
-              | Logical_plan.SelectField _ -> None)
-           select_list
-       in
-       let output =
-         List.map
-           (fun select_item ->
-              match select_item with
-              | Logical_plan.SelectField { group_by_index; _ } ->
-                GrouperAttribute { group_by_index }
-              | Logical_plan.SelectAggregate _ -> GrouperAggregate)
-           select_list
-       in
-       make_pp (Tuple_desc.from_grouping select_list)
-       @@ Grouper { child; group_by_exprs; create_aggregates; output })
+  | Logical_plan.Select { table_expr; predicates; grouping; order } ->
+    let table_expr_pp = build_plan_table_expr reg predicates table_expr in
+    let grouping_pp =
+      match grouping with
+      | Logical_plan.NoGrouping { select_list = Logical_plan.Star } -> table_expr_pp
+      | Logical_plan.NoGrouping { select_list = Logical_plan.SelectFields select_fields }
+        ->
+        make_pp (Tuple_desc.from_table_fields select_fields)
+        @@ Project
+             { child = table_expr_pp
+             ; exprs = fields_to_exprs select_fields table_expr_pp.desc
+             }
+      | Logical_plan.Grouping { select_list; group_by_fields } ->
+        let group_by_exprs = fields_to_exprs group_by_fields table_expr_pp.desc in
+        let create_aggregates () =
+          List.filter_map
+            (fun select_item ->
+               match select_item with
+               | Logical_plan.SelectAggregate { agg_kind; field; _ } ->
+                 Some
+                   (Aggregate.empty
+                      agg_kind
+                      field.typ
+                      (Expr.of_table_field field table_expr_pp.desc))
+               | Logical_plan.SelectField _ -> None)
+            select_list
+        in
+        let output =
+          List.map
+            (fun select_item ->
+               match select_item with
+               | Logical_plan.SelectField { group_by_index; _ } ->
+                 GrouperAttribute { group_by_index }
+               | Logical_plan.SelectAggregate _ -> GrouperAggregate)
+            select_list
+        in
+        make_pp (Tuple_desc.from_grouping select_list)
+        @@ Grouper { child = table_expr_pp; group_by_exprs; create_aggregates; output }
+    in
+    let order_pp =
+      match order with
+      | Some order_list ->
+        make_pp grouping_pp.desc
+        @@ Sorter
+             { child = grouping_pp
+             ; order =
+                 List.map
+                   (fun ({ field; order } : Logical_plan.order_item) ->
+                      { order_by_expr = Expr.of_field field grouping_pp.desc; order })
+                   order_list
+             }
+      | None -> grouping_pp
+    in
+    order_pp
   | Logical_plan.InsertValues { table; tuples } ->
     let file = Table_registry.get_table reg table in
     make_pp
@@ -234,5 +265,30 @@ let rec execute_plan' tid pp =
           output
       in
       Core.Tuple.{ values; rid = None })
+  | Sorter { child; order } ->
+    let order_by_exprs = List.map (fun { order_by_expr; _ } -> order_by_expr) order in
+    let order_specifiers = List.map (fun { order; _ } -> order) order in
+    let tuples =
+      execute_plan tid child
+      |> Seq.map (fun t -> eval_exprs order_by_exprs t, t)
+      |> List.of_seq
+    in
+    let compare (keys1, _) (keys2, _) =
+      let combined = List.combine (List.combine keys1 keys2) order_specifiers in
+      let rec cmp = function
+        | [] -> 0
+        | ((k1, k2), ord) :: rest ->
+          let op =
+            match ord with
+            | Syntax.Asc -> Value.compare
+            | Syntax.Desc -> Fun.flip Value.compare
+          in
+          let c = op k1 k2 in
+          if c = 0 then cmp rest else c
+      in
+      cmp combined
+    in
+    let sorted_tuples = List.sort compare tuples in
+    sorted_tuples |> List.map snd |> List.to_seq
 
 and execute_plan tid { plan; _ } = execute_plan' tid plan

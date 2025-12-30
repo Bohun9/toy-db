@@ -1,5 +1,6 @@
 open Core
 open Metadata
+module Field = Field
 module Table_field = Table_field
 
 type table_expr =
@@ -43,11 +44,17 @@ type grouping =
       ; group_by_fields : Table_field.t list
       }
 
+type order_item =
+  { field : Field.t
+  ; order : Syntax.order
+  }
+
 type t =
   | Select of
       { table_expr : table_expr
       ; predicates : (string, predicate list) Hashtbl.t
       ; grouping : grouping
+      ; order : order_item list option
       }
   | InsertValues of
       { table : string
@@ -88,7 +95,7 @@ let rec check_table_expr reg = function
 ;;
 
 let build_plan reg = function
-  | Syntax.Select { select_list; table_expr; predicates; group_by } ->
+  | Syntax.Select { select_list; table_expr; predicates; group_by; order_by } ->
     let table_expr, env = check_table_expr reg table_expr in
     let grouped_predicates = Hashtbl.create 16 in
     List.iter
@@ -103,55 +110,76 @@ let build_plan reg = function
            field.table_alias
            ({ field; op; value } :: Hashtbl.find grouped_predicates field.table_alias))
       predicates;
-    (match group_by with
-     | None ->
-       let select_list =
-         match select_list with
-         | Syntax.Star -> Star
-         | Syntax.SelectList select_list ->
-           SelectFields
-             (List.map
-                (fun select_item ->
-                   match select_item with
-                   | Syntax.SelectField { field } -> Table_env.resolve_field env field
-                   | Syntax.SelectAggregate _ -> raise Error.aggregate_without_grouping)
-                select_list)
-       in
-       Select
-         { table_expr
-         ; predicates = grouped_predicates
-         ; grouping = NoGrouping { select_list }
-         }
-     | Some { group_by_fields } ->
-       let group_by_fields = List.map (Table_env.resolve_field env) group_by_fields in
-       let group_by_seq = Table_field.Seq.from_list group_by_fields in
-       let select_list =
-         match select_list with
-         | Syntax.Star -> failwith "star with grouping"
-         | Syntax.SelectList select_list ->
+    let grouping, select_list_fields =
+      match group_by with
+      | None ->
+        let select_list =
+          match select_list with
+          | Syntax.Star -> Star
+          | Syntax.SelectList select_list ->
+            SelectFields
+              (List.map
+                 (fun select_item ->
+                    match select_item with
+                    | Syntax.SelectField { field } -> Table_env.resolve_field env field
+                    | Syntax.SelectAggregate _ -> raise Error.aggregate_without_grouping)
+                 select_list)
+        in
+        let select_list_fields =
+          match select_list with
+          | Star -> Table_env.fields env
+          | SelectFields fields -> List.map Field.of_table_field fields
+        in
+        NoGrouping { select_list }, select_list_fields
+      | Some { group_by_fields } ->
+        let group_by_fields = List.map (Table_env.resolve_field env) group_by_fields in
+        let group_by_seq = Table_field.Seq.from_list group_by_fields in
+        let select_list =
+          match select_list with
+          | Syntax.Star -> failwith "star with grouping"
+          | Syntax.SelectList select_list ->
+            List.map
+              (fun select_item ->
+                 match select_item with
+                 | Syntax.SelectField { field } ->
+                   let group_by_index, field =
+                     Table_field.Seq.resolve_field group_by_seq field
+                   in
+                   SelectField { field; group_by_index }
+                 | Syntax.SelectAggregate { agg_kind; field = field_name; name } ->
+                   let field = Table_env.resolve_field env field_name in
+                   SelectAggregate
+                     { agg_kind
+                     ; field
+                     ; name
+                     ; result_type = agg_result_type agg_kind field.typ
+                     })
+              select_list
+        in
+        let select_list_fields =
+          List.map
+            (fun select_item ->
+               match select_item with
+               | SelectField { field; _ } -> Field.of_table_field field
+               | SelectAggregate { name; result_type; _ } ->
+                 Field.virtual_field name result_type)
+            select_list
+        in
+        Grouping { select_list; group_by_fields }, select_list_fields
+    in
+    let select_list_env = Field.Env.from_list select_list_fields in
+    let order =
+      Option.map
+        (fun order_list ->
            List.map
-             (fun select_item ->
-                match select_item with
-                | Syntax.SelectField { field } ->
-                  let group_by_index, field =
-                    Table_field.Seq.resolve_field group_by_seq field
-                  in
-                  SelectField { field; group_by_index }
-                | Syntax.SelectAggregate { agg_kind; field = field_name; name } ->
-                  let field = Table_env.resolve_field env field_name in
-                  SelectAggregate
-                    { agg_kind
-                    ; field
-                    ; name
-                    ; result_type = agg_result_type agg_kind field.typ
-                    })
-             select_list
-       in
-       Select
-         { table_expr
-         ; predicates = grouped_predicates
-         ; grouping = Grouping { select_list; group_by_fields }
-         })
+             (fun ({ field = field_name; order } : Syntax.order_item) ->
+                { field = Field.Env.resolve_field select_list_env field_name
+                ; order = Option.value order ~default:Syntax.Asc
+                })
+             order_list)
+        order_by
+    in
+    Select { table_expr; predicates = grouped_predicates; grouping; order }
   | Syntax.InsertValues { table; tuples } ->
     let sch = get_table_schema reg table in
     let tuple_types = List.map Syntax.derive_tuple_type tuples in
