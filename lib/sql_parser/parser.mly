@@ -11,7 +11,7 @@ open Syntax
 %token <int> INT_LIT
 %token <string> STRING_LIT
 
-%token SELECT FROM WHERE AND JOIN ON CREATE TABLE INSERT INTO VALUES PRIMARY KEY GROUP BY AS ORDER
+%token SELECT FROM WHERE AND JOIN ON CREATE TABLE INSERT INTO VALUES PRIMARY KEY GROUP BY AS ORDER LIMIT OFFSET
 %token COUNT SUM AVG MIN MAX
 %token ASC DESC
 %token INT STRING
@@ -77,9 +77,15 @@ order_by_clause
   : /* empty */                                { None }
   | ORDER BY separated_list(COMMA, order_item) { Some $3 }
 
+limit_clause
+  : LIMIT INT_LIT { $2 }
+
+offset_clause
+  : OFFSET INT_LIT { $2 }
+
 stmt
-  : SELECT select_list FROM table_expr where_clause group_by_clause order_by_clause
-      { Select { select_list = $2; table_expr = $4; predicates = $5; group_by = $6; order_by = $7 } }
+  : SELECT select_list FROM table_expr where_clause group_by_clause order_by_clause limit_clause? offset_clause?
+      { Select { select_list = $2; table_expr = $4; predicates = $5; group_by = $6; order_by = $7; limit = $8; offset = $9 } }
   | INSERT INTO ID VALUES tuples { InsertValues { table = $3; tuples = $5 } }
 
 col_type

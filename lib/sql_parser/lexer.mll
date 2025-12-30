@@ -28,6 +28,8 @@ let kw_map = [
   "AS", AS;
   "ASC", ASC;
   "DESC", DESC;
+  "LIMIT", LIMIT;
+  "OFFSET", OFFSET;
 ] |> List.to_seq |> Hashtbl.of_seq
 
 let symbols_map = [

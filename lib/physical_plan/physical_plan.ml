@@ -47,6 +47,11 @@ type physical_plan_data =
       { child : t
       ; order : order_item list
       }
+  | Limiter of
+      { child : t
+      ; limit : int option
+      ; offset : int
+      }
 
 and t =
   { desc : Tuple_desc.t
@@ -120,7 +125,7 @@ let rec build_plan_table_expr reg grouped_predicates = function
 
 let build_plan reg logical_plan =
   match logical_plan with
-  | Logical_plan.Select { table_expr; predicates; grouping; order } ->
+  | Logical_plan.Select { table_expr; predicates; grouping; order; limit; offset } ->
     let table_expr_pp = build_plan_table_expr reg predicates table_expr in
     let grouping_pp =
       match grouping with
@@ -173,7 +178,14 @@ let build_plan reg logical_plan =
              }
       | None -> grouping_pp
     in
-    order_pp
+    let limit_pp =
+      match limit, offset with
+      | None, None -> order_pp
+      | _ ->
+        make_pp order_pp.desc
+        @@ Limiter { child = order_pp; limit; offset = Option.value offset ~default:0 }
+    in
+    limit_pp
   | Logical_plan.InsertValues { table; tuples } ->
     let file = Table_registry.get_table reg table in
     make_pp
@@ -290,5 +302,9 @@ let rec execute_plan' tid pp =
     in
     let sorted_tuples = List.sort compare tuples in
     sorted_tuples |> List.map snd |> List.to_seq
+  | Limiter { child; limit; offset } ->
+    execute_plan tid child
+    |> Seq.drop offset
+    |> Option.value (Option.map Seq.take limit) ~default:Fun.id
 
 and execute_plan tid { plan; _ } = execute_plan' tid plan

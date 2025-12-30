@@ -55,6 +55,8 @@ type t =
       ; predicates : (string, predicate list) Hashtbl.t
       ; grouping : grouping
       ; order : order_item list option
+      ; limit : int option
+      ; offset : int option
       }
   | InsertValues of
       { table : string

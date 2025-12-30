@@ -55,6 +55,8 @@ type t =
       ; predicates : (string, predicate list) Hashtbl.t
       ; grouping : grouping
       ; order : order_item list option
+      ; limit : int option
+      ; offset : int option
       }
   | InsertValues of
       { table : string
@@ -95,7 +97,8 @@ let rec check_table_expr reg = function
 ;;
 
 let build_plan reg = function
-  | Syntax.Select { select_list; table_expr; predicates; group_by; order_by } ->
+  | Syntax.Select
+      { select_list; table_expr; predicates; group_by; order_by; limit; offset } ->
     let table_expr, env = check_table_expr reg table_expr in
     let grouped_predicates = Hashtbl.create 16 in
     List.iter
@@ -179,7 +182,7 @@ let build_plan reg = function
              order_list)
         order_by
     in
-    Select { table_expr; predicates = grouped_predicates; grouping; order }
+    Select { table_expr; predicates = grouped_predicates; grouping; order; limit; offset }
   | Syntax.InsertValues { table; tuples } ->
     let sch = get_table_schema reg table in
     let tuple_types = List.map Syntax.derive_tuple_type tuples in

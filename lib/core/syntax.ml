@@ -81,6 +81,8 @@ type stmt =
       ; predicates : predicate list
       ; group_by : group_by option
       ; order_by : order_item list option
+      ; limit : int option
+      ; offset : int option
       }
   | InsertValues of
       { table : string
