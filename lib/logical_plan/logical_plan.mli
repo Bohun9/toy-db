@@ -3,18 +3,6 @@ open Metadata
 module Field = Field
 module Table_field = Table_field
 
-type table_expr =
-  | Table of
-      { name : string
-      ; alias : string
-      }
-  | Join of
-      { tab1 : table_expr
-      ; tab2 : table_expr
-      ; field1 : Table_field.t
-      ; field2 : Table_field.t
-      }
-
 type predicate =
   { field : Table_field.t
   ; op : Syntax.relop
@@ -49,15 +37,34 @@ type order_item =
   ; order : Syntax.order
   }
 
-type t =
-  | Select of
-      { table_expr : table_expr
-      ; predicates : (string, predicate list) Hashtbl.t
-      ; grouping : grouping
-      ; order : order_item list option
-      ; limit : int option
-      ; offset : int option
+type table_expr =
+  | Table of
+      { name : string
+      ; alias : string
       }
+  | Subquery of
+      { select : select_stmt
+      ; fields : Table_field.t list
+      }
+  | Join of
+      { tab1 : table_expr
+      ; tab2 : table_expr
+      ; field1 : Table_field.t
+      ; field2 : Table_field.t
+      }
+
+and select_stmt =
+  { table_expr : table_expr
+  ; predicates : (string, predicate list) Hashtbl.t
+  ; grouping : grouping
+  ; order : order_item list option
+  ; limit : int option
+  ; offset : int option
+  ; select_list_fields : Field.t list
+  }
+
+type t =
+  | Select of select_stmt
   | InsertValues of
       { table : string
       ; tuples : Syntax.tuple list

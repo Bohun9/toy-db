@@ -111,6 +111,9 @@ let rec build_plan_table_expr reg grouped_predicates = function
          @@ RangeScan { file; interval = index_interval }
        in
        build_plan_predicates pp other_predicates)
+  | Logical_plan.Subquery { select; fields } ->
+    let pp = build_plan reg (Logical_plan.Select select) in
+    { pp with desc = Tuple_desc.from_table_fields fields }
   | Logical_plan.Join { tab1; tab2; field1; field2 } ->
     let child1 = build_plan_table_expr reg grouped_predicates tab1 in
     let child2 = build_plan_table_expr reg grouped_predicates tab2 in
@@ -121,11 +124,10 @@ let rec build_plan_table_expr reg grouped_predicates = function
          ; e1 = Expr.of_table_field field1 child1.desc
          ; e2 = Expr.of_table_field field2 child2.desc
          }
-;;
 
-let build_plan reg logical_plan =
+and build_plan reg logical_plan =
   match logical_plan with
-  | Logical_plan.Select { table_expr; predicates; grouping; order; limit; offset } ->
+  | Logical_plan.Select { table_expr; predicates; grouping; order; limit; offset; _ } ->
     let table_expr_pp = build_plan_table_expr reg predicates table_expr in
     let grouping_pp =
       match grouping with

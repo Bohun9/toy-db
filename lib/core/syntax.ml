@@ -45,18 +45,6 @@ type select_list =
   | Star
   | SelectList of select_item list
 
-type table_expr =
-  | Table of
-      { name : string
-      ; alias : string option
-      }
-  | Join of
-      { tab1 : table_expr
-      ; tab2 : table_expr
-      ; field1 : field_name
-      ; field2 : field_name
-      }
-
 type predicate =
   { field : field_name
   ; op : relop
@@ -74,16 +62,34 @@ type order_item =
   ; order : order option
   }
 
-type stmt =
-  | Select of
-      { select_list : select_list
-      ; table_expr : table_expr
-      ; predicates : predicate list
-      ; group_by : group_by option
-      ; order_by : order_item list option
-      ; limit : int option
-      ; offset : int option
+type table_expr =
+  | Table of
+      { name : string
+      ; alias : string option
       }
+  | Subquery of
+      { select : select_stmt
+      ; alias : string
+      }
+  | Join of
+      { tab1 : table_expr
+      ; tab2 : table_expr
+      ; field1 : field_name
+      ; field2 : field_name
+      }
+
+and select_stmt =
+  { select_list : select_list
+  ; table_expr : table_expr
+  ; predicates : predicate list
+  ; group_by : group_by option
+  ; order_by : order_item list option
+  ; limit : int option
+  ; offset : int option
+  }
+
+type stmt =
+  | Select of select_stmt
   | InsertValues of
       { table : string
       ; tuples : tuple list

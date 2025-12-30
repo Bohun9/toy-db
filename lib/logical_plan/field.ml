@@ -10,6 +10,10 @@ let of_table_field ({ table_alias; column; typ } : Table_field.t) =
   { table_alias = Some table_alias; column; typ }
 ;;
 
+let to_table_field alias { column; typ; _ } =
+  Table_field.{ table_alias = alias; column; typ }
+;;
+
 let field_name_match fname field =
   match fname with
   | Core.Syntax.PureFieldName column -> column = field.column

@@ -60,6 +60,7 @@ select_list
 
 table_expr 
   : ID                                           { Table { name = $1; alias = None } }
+  | LPAREN select_stmt RPAREN AS ID              { Subquery { select = $2; alias = $5 } }
   | table_expr JOIN table_expr ON field EQ field { Join { tab1 = $1; tab2 = $3; field1 = $5; field2 = $7 } }
 
 predicate
@@ -83,9 +84,12 @@ limit_clause
 offset_clause
   : OFFSET INT_LIT { $2 }
 
-stmt
+select_stmt
   : SELECT select_list FROM table_expr where_clause group_by_clause order_by_clause limit_clause? offset_clause?
-      { Select { select_list = $2; table_expr = $4; predicates = $5; group_by = $6; order_by = $7; limit = $8; offset = $9 } }
+      { { select_list = $2; table_expr = $4; predicates = $5; group_by = $6; order_by = $7; limit = $8; offset = $9 } }
+
+stmt
+  : select_stmt { Select $1 }
   | INSERT INTO ID VALUES tuples { InsertValues { table = $3; tuples = $5 } }
 
 col_type

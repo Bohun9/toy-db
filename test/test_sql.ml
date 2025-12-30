@@ -100,11 +100,32 @@ let test_limit _ =
       | Catalog.Nothing -> failwith "internal error"))
 ;;
 
+let test_subquery _ =
+  with_filled_catalog (fun cat ->
+    Catalog.with_tid cat (fun tid ->
+      let result =
+        Catalog.execute_sql
+          "SELECT * FROM letters JOIN (SELECT MAX(quantity) AS max FROM letters GROUP \
+           BY) AS dummy ON quantity = max"
+          cat
+          tid
+      in
+      match result with
+      | Catalog.Stream tuples ->
+        let tuples = List.of_seq tuples in
+        U.assert_int_eq 1 (List.length tuples);
+        U.assert_tuple_eq
+          T.{ values = [ V.VString "C"; V.VInt 5; V.VInt 5 ]; rid = None }
+          (List.nth tuples 0)
+      | Catalog.Nothing -> failwith "internal error"))
+;;
+
 let suite =
   "sql"
   >::: [ "group_by" >:: test_group_by
        ; "order_by" >:: test_order_by
        ; "limit" >:: test_limit
+       ; "subquery" >:: test_subquery
        ]
 ;;
 
