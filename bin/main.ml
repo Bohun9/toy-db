@@ -29,17 +29,10 @@ let rec loop tid =
        (match e with
         | Core.Error.Parser_error { line; col; tok } ->
           printf "Parse error at (%d,%d): unexpected token '%s'\n" line col tok
-        | Core.Error.Unbound_alias_name _ -> printf "unbound alias name"
-        | Core.Error.Duplicate_alias _ -> printf "duplicate alias"
-        | Core.Error.Duplicate_column -> printf "duplicate column"
-        | Core.Error.Unknown_column _ -> printf "unknown column"
-        | Core.Error.Ambiguous_column _ -> printf "ambiguous column"
-        | Core.Error.Invalid_primary_key -> printf "invalid primary key"
-        | Core.Error.Table_not_found -> printf "Table not found\n"
-        | Core.Error.Table_already_exists -> printf "Table already exists\n"
-        | Core.Error.Type_mismatch -> printf "Type mismatch\n"
-        | Core.Error.Buffer_pool_overflow -> printf "Buffer pool overflow"
-        | Core.Error.Deadlock_victim -> printf "Deadlock victim\n")
+        | Core.Error.Semantic_error msg -> printf "semantic error: %s\n" msg
+        | Core.Error.Type_error msg -> printf "type error: %s\n" msg
+        | Core.Error.Buffer_pool_overflow -> printf "buffer pool overflow error\n"
+        | Core.Error.Deadlock_victim -> printf "deadlock victim error\n")
      | e -> printf "Error: %s\n" (Printexc.to_string e));
     loop tid
 ;;

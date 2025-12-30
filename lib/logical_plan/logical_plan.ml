@@ -1,12 +1,12 @@
-open Core
-open Metadata
+module C = Core
+module M = Metadata
 module Field = Field
 module Table_field = Table_field
 
 type predicate =
   { field : Table_field.t
-  ; op : Syntax.relop
-  ; value : Syntax.value
+  ; op : C.Syntax.relop
+  ; value : C.Syntax.value
   }
 
 type select_list =
@@ -19,10 +19,10 @@ type group_by_select_item =
       ; group_by_index : int
       }
   | SelectAggregate of
-      { agg_kind : Syntax.aggregate_kind
+      { agg_kind : C.Syntax.aggregate_kind
       ; field : Table_field.t
       ; name : string
-      ; result_type : Type.t
+      ; result_type : C.Type.t
       }
 
 type grouping =
@@ -34,7 +34,7 @@ type grouping =
 
 type order_item =
   { field : Field.t
-  ; order : Syntax.order
+  ; order : C.Syntax.order
   }
 
 type table_expr =
@@ -66,38 +66,38 @@ type t =
   | Select of select_stmt
   | InsertValues of
       { table : string
-      ; tuples : Syntax.tuple list
+      ; tuples : C.Syntax.tuple list
       }
 
 let agg_result_type agg_kind input_type =
   match agg_kind with
-  | Core.Syntax.Count -> Core.Type.TInt
-  | Core.Syntax.Sum -> Core.Type.TInt
-  | Core.Syntax.Avg -> Core.Type.TInt
-  | Core.Syntax.Min -> input_type
-  | Core.Syntax.Max -> input_type
+  | C.Syntax.Count -> C.Type.TInt
+  | C.Syntax.Sum -> C.Type.TInt
+  | C.Syntax.Avg -> C.Type.TInt
+  | C.Syntax.Min -> input_type
+  | C.Syntax.Max -> input_type
 ;;
 
 let require_same_type t1 t2 = if t1 <> t2 then raise Error.type_mismatch
 
 let get_table reg name =
-  match Table_registry.get_table_opt reg name with
+  match M.Table_registry.get_table_opt reg name with
   | Some t -> t
   | None -> raise Error.table_not_found
 ;;
 
-let get_table_schema reg name = get_table reg name |> Db_file.schema
+let get_table_schema reg name = get_table reg name |> M.Db_file.schema
 
 let rec check_table_expr reg = function
-  | Syntax.Table { name; alias } ->
+  | C.Syntax.Table { name; alias } ->
     let sch = get_table_schema reg name in
     let alias = Option.value alias ~default:name in
     Table { name; alias }, Table_env.extend_base Table_env.empty alias sch
-  | Syntax.Subquery { select; alias } ->
+  | C.Syntax.Subquery { select; alias } ->
     let select, select_list_fields = build_plan_select reg select in
     let fields = List.map (Field.to_table_field alias) select_list_fields in
     Subquery { select; fields }, Table_env.extend_derived Table_env.empty alias fields
-  | Syntax.Join { tab1; tab2; field1 = field_name1; field2 = field_name2 } ->
+  | C.Syntax.Join { tab1; tab2; field1 = field_name1; field2 = field_name2 } ->
     let tab1, env1 = check_table_expr reg tab1 in
     let tab2, env2 = check_table_expr reg tab2 in
     let field1 = Table_env.resolve_field env1 field_name1 in
@@ -107,7 +107,7 @@ let rec check_table_expr reg = function
 
 and build_plan_select
       reg
-      Syntax.{ select_list; table_expr; predicates; group_by; order_by; limit; offset }
+      C.Syntax.{ select_list; table_expr; predicates; group_by; order_by; limit; offset }
   =
   let table_expr, env = check_table_expr reg table_expr in
   let grouped_predicates = Hashtbl.create 16 in
@@ -115,9 +115,9 @@ and build_plan_select
     (fun alias -> Hashtbl.add grouped_predicates alias [])
     (Table_env.alias_names env);
   List.iter
-    (fun ({ field = field_name; op; value } : Syntax.predicate) ->
+    (fun ({ field = field_name; op; value } : C.Syntax.predicate) ->
        let field = Table_env.resolve_field env field_name in
-       require_same_type field.typ (Syntax.derive_value_type value);
+       require_same_type field.typ (C.Syntax.derive_value_type value);
        Hashtbl.replace
          grouped_predicates
          field.table_alias
@@ -128,14 +128,14 @@ and build_plan_select
     | None ->
       let select_list =
         match select_list with
-        | Syntax.Star -> Star
-        | Syntax.SelectList select_list ->
+        | C.Syntax.Star -> Star
+        | C.Syntax.SelectList select_list ->
           SelectFields
             (List.map
                (fun select_item ->
                   match select_item with
-                  | Syntax.SelectField { field } -> Table_env.resolve_field env field
-                  | Syntax.SelectAggregate _ -> raise Error.aggregate_without_grouping)
+                  | C.Syntax.SelectField { field } -> Table_env.resolve_field env field
+                  | C.Syntax.SelectAggregate _ -> raise Error.aggregate_without_grouping)
                select_list)
       in
       let select_list_fields =
@@ -149,17 +149,17 @@ and build_plan_select
       let group_by_seq = Table_field.Seq.from_list group_by_fields in
       let select_list =
         match select_list with
-        | Syntax.Star -> failwith "star with grouping"
-        | Syntax.SelectList select_list ->
+        | C.Syntax.Star -> failwith "star with grouping"
+        | C.Syntax.SelectList select_list ->
           List.map
             (fun select_item ->
                match select_item with
-               | Syntax.SelectField { field } ->
+               | C.Syntax.SelectField { field } ->
                  let group_by_index, field =
                    Table_field.Seq.resolve_field group_by_seq field
                  in
                  SelectField { field; group_by_index }
-               | Syntax.SelectAggregate { agg_kind; field = field_name; name } ->
+               | C.Syntax.SelectAggregate { agg_kind; field = field_name; name } ->
                  let field = Table_env.resolve_field env field_name in
                  SelectAggregate
                    { agg_kind
@@ -185,9 +185,9 @@ and build_plan_select
     Option.map
       (fun order_list ->
          List.map
-           (fun ({ field = field_name; order } : Syntax.order_item) ->
+           (fun ({ field = field_name; order } : C.Syntax.order_item) ->
               { field = Field.Env.resolve_field select_list_env field_name
-              ; order = Option.value order ~default:Syntax.Asc
+              ; order = Option.value order ~default:C.Syntax.Asc
               })
            order_list)
       order_by
@@ -197,11 +197,11 @@ and build_plan_select
 ;;
 
 let build_plan reg = function
-  | Syntax.Select select -> Select (build_plan_select reg select |> fst)
-  | Syntax.InsertValues { table; tuples } ->
+  | C.Syntax.Select select -> Select (build_plan_select reg select |> fst)
+  | C.Syntax.InsertValues { table; tuples } ->
     let sch = get_table_schema reg table in
-    let tuple_types = List.map Syntax.derive_tuple_type tuples in
-    if List.for_all (Table_schema.typecheck sch) tuple_types
+    let tuple_types = List.map C.Syntax.derive_tuple_type tuples in
+    if List.for_all (M.Table_schema.typecheck sch) tuple_types
     then InsertValues { table; tuples }
     else raise Error.type_mismatch
 ;;

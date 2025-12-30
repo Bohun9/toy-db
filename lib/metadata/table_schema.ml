@@ -1,6 +1,6 @@
-open Core
+module C = Core
 
-type column_data = Syntax.column_data [@@deriving show]
+type column_data = C.Syntax.column_data [@@deriving show]
 
 type t =
   { columns : column_data list
@@ -9,12 +9,12 @@ type t =
 [@@deriving show]
 
 let find_column' columns cname =
-  List.find_opt (fun (c : Syntax.column_data) -> c.name = cname) columns
+  List.find_opt (fun (c : C.Syntax.column_data) -> c.name = cname) columns
 ;;
 
 let create columns primary_key =
   let check_name_uniqueness () =
-    let names = List.map (fun (c : Syntax.column_data) -> c.name) columns in
+    let names = List.map (fun (c : C.Syntax.column_data) -> c.name) columns in
     if List.length (List.sort_uniq String.compare names) = List.length names
     then Ok ()
     else Error Error.duplicate_column
@@ -40,12 +40,12 @@ let primary_key sch =
   Option.map
     (fun pk ->
        ( pk
-       , List.find_index (fun (c : Syntax.column_data) -> c.name = pk) sch.columns
+       , List.find_index (fun (c : C.Syntax.column_data) -> c.name = pk) sch.columns
          |> Option.get ))
     sch.primary_key
 ;;
 
-let types sch = List.map (fun ({ typ; _ } : Syntax.column_data) -> typ) sch.columns
+let types sch = List.map (fun ({ typ; _ } : C.Syntax.column_data) -> typ) sch.columns
 let column_type sch i = List.nth (types sch) i
 let find_column sch cname = find_column' sch.columns cname
 let typecheck sch tuple_type = types sch = tuple_type

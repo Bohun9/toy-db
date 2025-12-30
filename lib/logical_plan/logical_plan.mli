@@ -1,12 +1,10 @@
-open Core
-open Metadata
 module Field = Field
 module Table_field = Table_field
 
 type predicate =
   { field : Table_field.t
-  ; op : Syntax.relop
-  ; value : Syntax.value
+  ; op : Core.Syntax.relop
+  ; value : Core.Syntax.value
   }
 
 type select_list =
@@ -19,10 +17,10 @@ type group_by_select_item =
       ; group_by_index : int
       }
   | SelectAggregate of
-      { agg_kind : Syntax.aggregate_kind
+      { agg_kind : Core.Syntax.aggregate_kind
       ; field : Table_field.t
       ; name : string
-      ; result_type : Type.t
+      ; result_type : Core.Type.t
       }
 
 type grouping =
@@ -34,7 +32,7 @@ type grouping =
 
 type order_item =
   { field : Field.t
-  ; order : Syntax.order
+  ; order : Core.Syntax.order
   }
 
 type table_expr =
@@ -66,7 +64,7 @@ type t =
   | Select of select_stmt
   | InsertValues of
       { table : string
-      ; tuples : Syntax.tuple list
+      ; tuples : Core.Syntax.tuple list
       }
 
-val build_plan : Table_registry.t -> Syntax.stmt -> t
+val build_plan : Metadata.Table_registry.t -> Core.Syntax.stmt -> t
