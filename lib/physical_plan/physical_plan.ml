@@ -1,5 +1,6 @@
-open Core
-open Metadata
+module C = Core
+module M = Metadata
+module L = Logical_plan
 
 type grouper_output_item =
   | GrouperAttribute of { group_by_index : int }
@@ -7,19 +8,19 @@ type grouper_output_item =
 
 type order_specifier =
   { order_by_expr : Expr.t
-  ; order : Syntax.order
+  ; order : C.Syntax.order
   }
 
 type physical_plan_data =
-  | SeqScan of { file : Db_file.table_file }
+  | SeqScan of { file : M.Db_file.table_file }
   | RangeScan of
-      { file : Db_file.index_file
-      ; interval : Value_interval.t
+      { file : M.Db_file.index_file
+      ; interval : C.Value_interval.t
       }
-  | Const of { tuples : Tuple.t list }
+  | Const of { tuples : C.Tuple.t list }
   | Insert of
       { child : t
-      ; file : Db_file.table_file
+      ; file : M.Db_file.table_file
       }
   | Project of
       { child : t
@@ -28,7 +29,7 @@ type physical_plan_data =
   | Filter of
       { child : t
       ; e1 : Expr.t
-      ; op : Syntax.relop
+      ; op : C.Syntax.relop
       ; e2 : Expr.t
       }
   | Join of
@@ -61,60 +62,54 @@ and t =
 let make_pp desc plan = { desc; plan }
 let fields_to_exprs fs desc = List.map (fun f -> Expr.of_table_field f desc) fs
 
-let build_plan_predicate pp ({ field; op; value } : Logical_plan.predicate) =
-  make_pp pp.desc
+let build_plan_predicate child ({ field; op; value } : L.predicate) =
+  make_pp child.desc
   @@ Filter
-       { child = pp
-       ; e1 = Expr.of_table_field field pp.desc
+       { child
+       ; e1 = Expr.of_table_field field child.desc
        ; op
-       ; e2 = EValue (Value.trans value)
+       ; e2 = Expr.Value (C.Value.trans value)
        }
 ;;
 
-let build_plan_predicates pp preds =
-  List.fold_left (fun acc pred -> build_plan_predicate pp pred) pp preds
-;;
+let build_plan_predicates child preds = List.fold_left build_plan_predicate child preds
 
 let index_interval_from_predicates predicates key_type =
   List.fold_left
-    (fun acc ({ op; value; _ } : Logical_plan.predicate) ->
-       Value_interval.constrain acc op (Value.trans value))
-    (Value_interval.unbounded key_type)
+    (fun acc ({ op; value; _ } : L.predicate) ->
+       C.Value_interval.constrain acc op (C.Value.trans value))
+    (C.Value_interval.unbounded key_type)
     predicates
 ;;
 
 let rec build_plan_table_expr reg grouped_predicates = function
-  | Logical_plan.Table { name; alias } ->
+  | L.Table { name; alias; fields } ->
     let predicates = Hashtbl.find grouped_predicates alias in
-    (match Table_registry.get_table reg name with
-     | Db_file.TableFile file ->
-       let (Db_file.PackedTable (m, f)) = file in
-       let module M = (val m) in
-       let pp =
-         make_pp (Tuple_desc.from_table_schema (M.schema f) alias) @@ SeqScan { file }
-       in
+    (match M.Table_registry.get_table reg name with
+     | M.Db_file.TableFile file ->
+       let pp = make_pp (Tuple_desc.from_table_fields fields) @@ SeqScan { file } in
        build_plan_predicates pp predicates
-     | Db_file.IndexFile file ->
-       let (Db_file.PackedIndex (m, f)) = file in
+     | M.Db_file.IndexFile file ->
+       let (M.Db_file.PackedIndex (m, f)) = file in
        let module M = (val m) in
        let index_key = M.key_info f in
        let index_predicates, other_predicates =
          List.partition
-           (fun ({ field; _ } : Logical_plan.predicate) -> index_key.name = field.column)
+           (fun ({ field; _ } : L.predicate) -> index_key.name = field.column)
            predicates
        in
        let index_interval =
          index_interval_from_predicates index_predicates index_key.typ
        in
        let pp =
-         make_pp (Tuple_desc.from_table_schema (M.schema f) alias)
+         make_pp (Tuple_desc.from_table_fields fields)
          @@ RangeScan { file; interval = index_interval }
        in
        build_plan_predicates pp other_predicates)
-  | Logical_plan.Subquery { select; fields } ->
-    let pp = build_plan reg (Logical_plan.Select select) in
+  | L.Subquery { select; fields } ->
+    let pp = build_plan reg (L.Select select) in
     { pp with desc = Tuple_desc.from_table_fields fields }
-  | Logical_plan.Join { tab1; tab2; field1; field2 } ->
+  | L.Join { tab1; tab2; field1; field2 } ->
     let child1 = build_plan_table_expr reg grouped_predicates tab1 in
     let child2 = build_plan_table_expr reg grouped_predicates tab2 in
     make_pp (Tuple_desc.combine child1.desc child2.desc)
@@ -127,41 +122,39 @@ let rec build_plan_table_expr reg grouped_predicates = function
 
 and build_plan reg logical_plan =
   match logical_plan with
-  | Logical_plan.Select
-      { table_expr; predicates; grouping; order_specifiers; limit; offset } ->
+  | L.Select { table_expr; predicates; grouping; order_specifiers; limit; offset } ->
     let table_expr_pp = build_plan_table_expr reg predicates table_expr in
     let grouping_pp =
       match grouping with
-      | Logical_plan.NoGrouping { select_list = Logical_plan.Star } -> table_expr_pp
-      | Logical_plan.NoGrouping { select_list = Logical_plan.SelectFields select_fields }
-        ->
+      | L.NoGrouping { select_list = L.Star } -> table_expr_pp
+      | L.NoGrouping { select_list = L.SelectFields select_fields } ->
         make_pp (Tuple_desc.from_table_fields select_fields)
         @@ Project
              { child = table_expr_pp
              ; exprs = fields_to_exprs select_fields table_expr_pp.desc
              }
-      | Logical_plan.Grouping { select_list; group_by_fields } ->
+      | L.Grouping { select_list; group_by_fields } ->
         let group_by_exprs = fields_to_exprs group_by_fields table_expr_pp.desc in
         let create_aggregates () =
           List.filter_map
             (fun select_item ->
                match select_item with
-               | Logical_plan.SelectAggregate { agg_kind; field; _ } ->
+               | L.SelectAggregate { agg_kind; field; _ } ->
                  Some
                    (Aggregate.empty
                       agg_kind
                       field.typ
                       (Expr.of_table_field field table_expr_pp.desc))
-               | Logical_plan.SelectField _ -> None)
+               | L.SelectField _ -> None)
             select_list
         in
         let output =
           List.map
             (fun select_item ->
                match select_item with
-               | Logical_plan.SelectField { group_by_index; _ } ->
+               | L.SelectField { group_by_index; _ } ->
                  GrouperAttribute { group_by_index }
-               | Logical_plan.SelectAggregate _ -> GrouperAggregate)
+               | L.SelectAggregate _ -> GrouperAggregate)
             select_list
         in
         make_pp (Tuple_desc.from_grouping select_list)
@@ -175,7 +168,7 @@ and build_plan reg logical_plan =
              { child = grouping_pp
              ; order_specifiers =
                  List.map
-                   (fun ({ field; order } : Logical_plan.order_specifier) ->
+                   (fun ({ field; order } : L.order_specifier) ->
                       { order_by_expr = Expr.of_field field grouping_pp.desc; order })
                    order_specifiers
              }
@@ -189,16 +182,16 @@ and build_plan reg logical_plan =
         @@ Limiter { child = order_pp; limit; offset = Option.value offset ~default:0 }
     in
     limit_pp
-  | Logical_plan.InsertValues { table; tuples } ->
-    let file = Table_registry.get_table reg table in
+  | L.InsertValues { table; tuples } ->
+    let file = M.Table_registry.get_table reg table in
     make_pp
       Tuple_desc.dummy
       (Insert
          { child =
              make_pp
                Tuple_desc.dummy
-               (Const { tuples = List.map Tuple.trans_tuple tuples })
-         ; file = Db_file.to_table_file file
+               (Const { tuples = List.map C.Tuple.trans_tuple tuples })
+         ; file = M.Db_file.to_table_file file
          })
 ;;
 
@@ -206,27 +199,27 @@ let eval_exprs es t = List.map (fun e -> Expr.eval e t) es
 
 let rec execute_plan' tid pp =
   match pp with
-  | SeqScan { file = Db_file.PackedTable (m, f) } ->
+  | SeqScan { file = M.Db_file.PackedTable (m, f) } ->
     let module M = (val m) in
     M.scan_file f tid
-  | RangeScan { file = Db_file.PackedIndex (m, f); interval } ->
+  | RangeScan { file = M.Db_file.PackedIndex (m, f); interval } ->
     let module M = (val m) in
     M.range_scan f interval tid
   | Const { tuples } -> List.to_seq tuples
-  | Insert { child; file = Db_file.PackedTable (m, f) } ->
+  | Insert { child; file = M.Db_file.PackedTable (m, f) } ->
     let module M = (val m) in
     Seq.iter (fun t -> M.insert_tuple f t tid) (execute_plan tid child);
     Seq.empty
   | Project { child; exprs } ->
     Seq.map
-      (fun t -> Core.Tuple.{ attributes = eval_exprs exprs t; rid = None })
+      (fun t -> C.Tuple.{ attributes = eval_exprs exprs t; rid = None })
       (execute_plan tid child)
   | Filter { child; e1; op; e2 } ->
     Seq.filter
       (fun t ->
          let v1 = Expr.eval e1 t in
          let v2 = Expr.eval e2 t in
-         Value.eval_relop v1 op v2)
+         C.Value.eval_relop v1 op v2)
       (execute_plan tid child)
   | Join { child1; child2; e1; e2 } ->
     fun () ->
@@ -245,7 +238,8 @@ let rec execute_plan' tid pp =
         (fun t2 ->
            let v2 = Expr.eval e2 t2 in
            match Hashtbl.find_opt groups v2 with
-           | Some group -> List.to_seq (List.map (Fun.flip Tuple.combine_tuple t2) group)
+           | Some group ->
+             List.to_seq (List.map (Fun.flip C.Tuple.combine_tuple t2) group)
            | None -> Seq.empty)
         (execute_plan tid child2)
         ()
@@ -279,7 +273,7 @@ let rec execute_plan' tid pp =
                Aggregate.finalize agg)
           output
       in
-      Core.Tuple.{ attributes; rid = None })
+      C.Tuple.{ attributes; rid = None })
   | Sorter { child; order_specifiers } ->
     let order_by_exprs, orders =
       List.split
@@ -297,16 +291,15 @@ let rec execute_plan' tid pp =
         | ((k1, k2), ord) :: rest ->
           let kcompare =
             match ord with
-            | Syntax.Asc -> Value.compare
-            | Syntax.Desc -> Fun.flip Value.compare
+            | C.Syntax.Asc -> C.Value.compare
+            | C.Syntax.Desc -> Fun.flip C.Value.compare
           in
           let c = kcompare k1 k2 in
           if c = 0 then cmp rest else c
       in
       cmp combined
     in
-    let sorted_tuples = List.sort compare tuples in
-    sorted_tuples |> List.map snd |> List.to_seq
+    tuples |> List.sort compare |> List.map snd |> List.to_seq
   | Limiter { child; limit; offset } ->
     execute_plan tid child
     |> Seq.drop offset

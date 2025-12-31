@@ -39,6 +39,7 @@ type table_expr =
   | Table of
       { name : string
       ; alias : string
+      ; fields : Table_field.t list
       }
   | Subquery of
       { select : select_stmt

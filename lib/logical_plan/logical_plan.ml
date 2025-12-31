@@ -41,6 +41,7 @@ type table_expr =
   | Table of
       { name : string
       ; alias : string
+      ; fields : Table_field.t list
       }
   | Subquery of
       { select : select_stmt
@@ -93,7 +94,7 @@ let rec check_table_expr reg = function
     let sch = get_table_schema reg name in
     let alias = Option.value alias ~default:name in
     let fields = Table_field.schema_to_fields alias sch in
-    Table { name; alias }, Table_env.extend Table_env.empty alias fields
+    Table { name; alias; fields }, Table_env.extend Table_env.empty alias fields
   | C.Syntax.Subquery { select; alias } ->
     let select, select_list_fields = build_plan_select reg select in
     let fields = List.map (Table_field.of_field_with_alias alias) select_list_fields in

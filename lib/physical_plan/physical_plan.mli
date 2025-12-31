@@ -1,7 +1,4 @@
-open Core
-open Metadata
-
 type t
 
-val build_plan : Table_registry.t -> Logical_plan.t -> t
-val execute_plan : Transaction_id.t -> t -> Tuple.t Seq.t
+val build_plan : Metadata.Table_registry.t -> Logical_plan.t -> t
+val execute_plan : Core.Transaction_id.t -> t -> Core.Tuple.t Seq.t
