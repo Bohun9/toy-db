@@ -16,22 +16,17 @@ let create columns primary_key =
   let check_name_uniqueness () =
     let names = List.map (fun (c : C.Syntax.column_data) -> c.name) columns in
     if List.length (List.sort_uniq String.compare names) = List.length names
-    then Ok ()
-    else Error Error.duplicate_column
+    then ()
+    else raise Error.duplicate_column
   in
   let check_primary_key key_column =
     match find_column columns key_column with
-    | Some _ -> Ok ()
-    | None -> Error Error.invalid_primary_key
+    | Some _ -> ()
+    | None -> raise Error.invalid_primary_key
   in
-  let ( let* ) = Result.bind in
-  let* () = check_name_uniqueness () in
-  let* () =
-    match primary_key with
-    | None -> Ok ()
-    | Some key_column -> check_primary_key key_column
-  in
-  Ok { columns; primary_key }
+  check_name_uniqueness ();
+  Option.iter check_primary_key primary_key;
+  { columns; primary_key }
 ;;
 
 let columns sch = sch.columns

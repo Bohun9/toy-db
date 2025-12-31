@@ -21,9 +21,9 @@ let rec loop tid =
          printf "%s\n" (Metadata.Table_schema.show schema)
        | sql_query ->
          (match Catalog.execute_sql sql_query catalog tid with
-          | Catalog.Stream s ->
+          | Catalog.Rows s ->
             Seq.iter (fun tuple -> printf "%s\n" (Core.Tuple.show tuple)) s
-          | Catalog.Nothing -> ())
+          | Catalog.NoResult -> ())
      with
      | Core.Error.DBError e ->
        (match e with

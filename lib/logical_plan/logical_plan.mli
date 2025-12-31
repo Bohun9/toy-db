@@ -37,7 +37,7 @@ type order_specifier =
 
 type table_expr =
   | Table of
-      { name : string
+      { file : Metadata.Db_file.t
       ; alias : string
       ; fields : Table_field.t list
       }
@@ -64,7 +64,7 @@ and select_stmt =
 type t =
   | Select of select_stmt
   | InsertValues of
-      { table : string
+      { file : Metadata.Db_file.t
       ; tuples : Core.Syntax.tuple list
       }
 

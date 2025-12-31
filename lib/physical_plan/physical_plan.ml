@@ -83,9 +83,9 @@ let index_interval_from_predicates predicates key_type =
 ;;
 
 let rec build_plan_table_expr reg grouped_predicates = function
-  | L.Table { name; alias; fields } ->
+  | L.Table { file; alias; fields } ->
     let predicates = Hashtbl.find grouped_predicates alias in
-    (match M.Table_registry.get_table reg name with
+    (match file with
      | M.Db_file.TableFile file ->
        let pp = make_pp (Tuple_desc.from_table_fields fields) @@ SeqScan { file } in
        build_plan_predicates pp predicates
@@ -182,8 +182,7 @@ and build_plan reg logical_plan =
         @@ Limiter { child = order_pp; limit; offset = Option.value offset ~default:0 }
     in
     limit_pp
-  | L.InsertValues { table; tuples } ->
-    let file = M.Table_registry.get_table reg table in
+  | L.InsertValues { file; tuples } ->
     make_pp
       Tuple_desc.dummy
       (Insert

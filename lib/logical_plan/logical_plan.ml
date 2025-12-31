@@ -39,7 +39,7 @@ type order_specifier =
 
 type table_expr =
   | Table of
-      { name : string
+      { file : M.Db_file.t
       ; alias : string
       ; fields : Table_field.t list
       }
@@ -66,7 +66,7 @@ and select_stmt =
 type t =
   | Select of select_stmt
   | InsertValues of
-      { table : string
+      { file : M.Db_file.t
       ; tuples : C.Syntax.tuple list
       }
 
@@ -81,20 +81,18 @@ let agg_result_type agg_kind input_type =
 
 let require_same_type t1 t2 = if t1 <> t2 then raise Error.type_mismatch
 
-let get_table reg name =
-  match M.Table_registry.get_table_opt reg name with
-  | Some t -> t
-  | None -> raise Error.table_not_found
+let get_table_with_schema reg name =
+  let file = M.Table_registry.get_table reg name in
+  let sch = M.Db_file.schema file in
+  file, sch
 ;;
-
-let get_table_schema reg name = get_table reg name |> M.Db_file.schema
 
 let rec check_table_expr reg = function
   | C.Syntax.Table { name; alias } ->
-    let sch = get_table_schema reg name in
+    let file, sch = get_table_with_schema reg name in
     let alias = Option.value alias ~default:name in
     let fields = Table_field.schema_to_fields alias sch in
-    Table { name; alias; fields }, Table_env.extend Table_env.empty alias fields
+    Table { file; alias; fields }, Table_env.extend Table_env.empty alias fields
   | C.Syntax.Subquery { select; alias } ->
     let select, select_list_fields = build_plan_select reg select in
     let fields = List.map (Table_field.of_field_with_alias alias) select_list_fields in
@@ -210,9 +208,9 @@ and build_plan_select
 let build_plan reg = function
   | C.Syntax.Select select -> Select (build_plan_select reg select |> fst)
   | C.Syntax.InsertValues { table; tuples } ->
-    let sch = get_table_schema reg table in
+    let file, sch = get_table_with_schema reg table in
     let tuple_types = List.map C.Syntax.derive_tuple_type tuples in
     if List.for_all (M.Table_schema.typecheck sch) tuple_types
-    then InsertValues { table; tuples }
+    then InsertValues { file; tuples }
     else raise Error.type_mismatch
 ;;

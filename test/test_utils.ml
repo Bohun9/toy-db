@@ -10,10 +10,7 @@ let rec shuffle = function
     List.rev_append (shuffle l) (shuffle r)
 ;;
 
-let counter_schema =
-  Table_schema.create [ { name = "counter"; typ = Type.Int } ] None |> Result.get_ok
-;;
-
+let counter_schema = Table_schema.create [ { name = "counter"; typ = Type.Int } ] None
 let make_counter_tuple n : Tuple.t = { attributes = [ Int n ]; rid = None }
 let cmp_tuple (t1 : Tuple.t) (t2 : Tuple.t) = t1.attributes = t2.attributes
 let assert_int_eq = OUnit2.assert_equal ~printer:string_of_int
