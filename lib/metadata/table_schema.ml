@@ -8,7 +8,7 @@ type t =
   }
 [@@deriving show]
 
-let find_column' columns cname =
+let find_column columns cname =
   List.find_opt (fun (c : C.Syntax.column_data) -> c.name = cname) columns
 ;;
 
@@ -20,7 +20,7 @@ let create columns primary_key =
     else Error Error.duplicate_column
   in
   let check_primary_key key_column =
-    match find_column' columns key_column with
+    match find_column columns key_column with
     | Some _ -> Ok ()
     | None -> Error Error.invalid_primary_key
   in
@@ -45,7 +45,7 @@ let primary_key sch =
     sch.primary_key
 ;;
 
-let types sch = List.map (fun ({ typ; _ } : C.Syntax.column_data) -> typ) sch.columns
+let types sch = List.map (fun (c : C.Syntax.column_data) -> c.typ) sch.columns
 let column_type sch i = List.nth (types sch) i
-let find_column sch cname = find_column' sch.columns cname
+let find_column sch cname = find_column sch.columns cname
 let typecheck sch tuple_type = types sch = tuple_type

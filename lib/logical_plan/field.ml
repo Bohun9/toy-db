@@ -1,45 +1,46 @@
+module C = Core
+
 type t =
   { table_alias : string option (* [None] for virtual columns. *)
   ; column : string
-  ; typ : Core.Type.t
+  ; typ : C.Type.t
   }
 
 let virtual_field column typ = { table_alias = None; column; typ }
 
-let of_table_field ({ table_alias; column; typ } : Table_field.t) =
-  { table_alias = Some table_alias; column; typ }
-;;
-
-let to_table_field alias { column; typ; _ } =
-  Table_field.{ table_alias = alias; column; typ }
-;;
-
 let field_name_match fname field =
   match fname with
-  | Core.Syntax.UnqualifiedField { column } -> column = field.column
-  | Core.Syntax.QualifiedField { alias; column } ->
+  | C.Syntax.UnqualifiedField { column } -> column = field.column
+  | C.Syntax.QualifiedField { alias; column } ->
     Some alias = field.table_alias && column = field.column
 ;;
 
 type field = t
 
 module type ENV = sig
-  type t
+  type 'a t
 
-  val from_list : field list -> t
-  val resolve_field : t -> Core.Syntax.field_name -> field
+  val empty : 'a t
+  val extend : 'a t -> field -> 'a -> 'a t
+  val merge : 'a t -> 'a t -> 'a t
+  val resolve_field : 'a t -> C.Syntax.field_name -> (field * 'a, exn) result
+  val fields : 'a t -> field list
 end
 
 module Env : ENV = struct
-  type t = field list
+  type 'a t = (field * 'a) list
 
-  let from_list fs = fs
+  let empty = []
+  let extend env f data = (f, data) :: env
+  let merge env1 env2 = env2 @ env1
 
-  let resolve_field fs field_name =
-    let matches = List.filter (fun f -> field_name_match field_name f) fs in
+  let resolve_field env field_name =
+    let matches = List.filter (fun (f, _) -> field_name_match field_name f) env in
     match matches with
-    | [] -> failwith "no match"
-    | [ field ] -> field
-    | _ -> failwith "ambiguous field name"
+    | [] -> Error Error.unknown_field
+    | [ match' ] -> Ok match'
+    | _ -> Error Error.ambiguous_field
   ;;
+
+  let fields env = env |> List.rev |> List.map fst
 end

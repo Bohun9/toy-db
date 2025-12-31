@@ -29,9 +29,9 @@ let step { state; expr } tuple =
   let v = Expr.eval expr tuple in
   match state with
   | Count s -> s.cnt <- s.cnt + 1
-  | Sum s -> s.sum <- s.sum + Core.Value.value_to_int v
+  | Sum s -> s.sum <- s.sum + Core.Value.to_int v
   | Avg s ->
-    s.sum <- s.sum + Core.Value.value_to_int v;
+    s.sum <- s.sum + Core.Value.to_int v;
     s.cnt <- s.cnt + 1
   | Max s -> s.value <- Core.Value.max s.value v
   | Min s -> s.value <- Core.Value.min s.value v

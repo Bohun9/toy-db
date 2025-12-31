@@ -24,12 +24,12 @@ let eval_lt v1 v2 = eval_relop v1 Syntax.Lt v2
 let eval_ge v1 v2 = eval_relop v1 Syntax.Ge v2
 let eval_gt v1 v2 = eval_relop v1 Syntax.Gt v2
 
-let value_to_int = function
+let to_int = function
   | Int n -> n
   | _ -> failwith "internal error - value_to_int"
 ;;
 
-let value_to_string = function
+let to_string = function
   | String s -> s
   | _ -> failwith "internal error -  value_to_string"
 ;;

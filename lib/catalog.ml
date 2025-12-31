@@ -207,8 +207,8 @@ let load_catalog_tables cat =
         tables
         |> List.of_seq
         |> List.map (fun (t : Tuple.t) ->
-          ( Tuple.attribute t 0 |> Value.value_to_string
-          , Tuple.attribute t 1 |> Value.value_to_string |> decode_primary_key ))
+          ( Tuple.attribute t 0 |> Value.to_string
+          , Tuple.attribute t 1 |> Value.to_string |> decode_primary_key ))
       | _ -> failwith "internal error - load_catalog_tables")
   in
   Log.log "catalog tables loaded";
@@ -224,10 +224,10 @@ let load_catalog_columns cat =
       columns
       |> List.of_seq
       |> List.map (fun (t : Tuple.t) ->
-        ( Tuple.attribute t 0 |> Value.value_to_string
-        , Tuple.attribute t 1 |> Value.value_to_string
-        , Tuple.attribute t 2 |> Value.value_to_int |> (fun t -> TypeId t) |> from_type_id
-        , Tuple.attribute t 3 |> Value.value_to_int ))
+        ( Tuple.attribute t 0 |> Value.to_string
+        , Tuple.attribute t 1 |> Value.to_string
+        , Tuple.attribute t 2 |> Value.to_int |> (fun t -> TypeId t) |> from_type_id
+        , Tuple.attribute t 3 |> Value.to_int ))
     | _ -> failwith "internal error - load_catalog_columns")
 ;;
 

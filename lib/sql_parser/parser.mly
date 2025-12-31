@@ -71,12 +71,10 @@ where_clause
   | WHERE separated_list(AND, predicate) { $2 }
 
 group_by_clause
-  : /* empty */                           { None }
-  | GROUP BY separated_list(COMMA, field) { Some { group_by_fields = $3 } }
+  : GROUP BY separated_list(COMMA, field) { { group_by_fields = $3 } }
 
 order_by_clause
-  : /* empty */                                { None }
-  | ORDER BY separated_list(COMMA, order_item) { Some $3 }
+  : ORDER BY separated_list(COMMA, order_item) { $3 }
 
 limit_clause
   : LIMIT INT_LIT { $2 }
@@ -85,7 +83,7 @@ offset_clause
   : OFFSET INT_LIT { $2 }
 
 select_stmt
-  : SELECT select_list FROM table_expr where_clause group_by_clause order_by_clause limit_clause? offset_clause?
+  : SELECT select_list FROM table_expr where_clause group_by_clause? order_by_clause? limit_clause? offset_clause?
       { { select_list = $2; table_expr = $4; predicates = $5; group_by = $6; order_by = $7; limit = $8; offset = $9 } }
 
 stmt

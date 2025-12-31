@@ -44,5 +44,5 @@ let field_index desc (field : Logical_plan.Field.t) =
 ;;
 
 let table_field_index desc (field : Logical_plan.Table_field.t) =
-  field_index desc (Logical_plan.Field.of_table_field field)
+  field_index desc (Logical_plan.Table_field.to_field field)
 ;;

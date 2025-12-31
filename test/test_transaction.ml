@@ -6,7 +6,7 @@ module U = Test_utils
 
 let read_counter hf tid =
   let t = Storage.Heap_file.scan_file hf tid |> List.of_seq |> List.hd in
-  Core.Value.value_to_int (Core.Tuple.attribute t 0), t.rid
+  Core.Value.to_int (Core.Tuple.attribute t 0), t.rid
 ;;
 
 let rec do_transaction task_id hf bp =
