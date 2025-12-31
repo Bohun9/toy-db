@@ -1,4 +1,4 @@
 type t =
-  | TInt
-  | TString
+  | Int
+  | String
 [@@deriving show]

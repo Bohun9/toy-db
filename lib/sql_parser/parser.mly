@@ -23,8 +23,8 @@ relop
   : EQ { Eq }
 
 field
-  : ID        { PureFieldName $1 }
-  | ID DOT ID { QualifiedFieldName { alias = $1; column = $3 } }
+  : ID        { UnqualifiedField { column = $1 } }
+  | ID DOT ID { QualifiedField { alias = $1; column = $3 } }
 
 value 
   : INT_LIT    { VInt $1 }
@@ -93,8 +93,8 @@ stmt
   | INSERT INTO ID VALUES tuples { InsertValues { table = $3; tuples = $5 } }
 
 col_type
-  : INT    { Type.TInt }
-  | STRING { Type.TString }
+  : INT    { Type.Int }
+  | STRING { Type.String }
 
 col_data
   : ID col_type { { Syntax.name = $1; typ = $2 } }

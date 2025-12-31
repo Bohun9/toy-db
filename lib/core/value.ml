@@ -2,17 +2,11 @@ let int_size = 8
 let string_max_length = 32
 
 type t =
-  | VInt of int
-  | VString of string
+  | Int of int
+  | String of string
 [@@deriving show]
 
 let compare = compare
-
-let derive_type = function
-  | VInt _ -> Type.TInt
-  | VString _ -> Type.TString
-;;
-
 let min = min
 let max = max
 
@@ -31,31 +25,31 @@ let eval_ge v1 v2 = eval_relop v1 Syntax.Ge v2
 let eval_gt v1 v2 = eval_relop v1 Syntax.Gt v2
 
 let value_to_int = function
-  | VInt n -> n
+  | Int n -> n
   | _ -> failwith "internal error - value_to_int"
 ;;
 
 let value_to_string = function
-  | VString s -> s
+  | String s -> s
   | _ -> failwith "internal error -  value_to_string"
 ;;
 
 let derive_type = function
-  | VInt _ -> Type.TInt
-  | VString _ -> Type.TString
+  | Int _ -> Type.Int
+  | String _ -> Type.String
 ;;
 
 let trans = function
-  | Syntax.VInt n -> VInt n
-  | Syntax.VString s -> VString s
+  | Syntax.VInt n -> Int n
+  | Syntax.VString s -> String s
 ;;
 
 let minus_infty = function
-  | Type.TInt -> VInt Int.min_int
-  | Type.TString -> VString ""
+  | Type.Int -> Int Int.min_int
+  | Type.String -> String ""
 ;;
 
 let plus_infty = function
-  | Type.TInt -> VInt Int.max_int
-  | Type.TString -> VString (String.make string_max_length '\xFF')
+  | Type.Int -> Int Int.max_int
+  | Type.String -> String (String.make string_max_length '\xFF')
 ;;

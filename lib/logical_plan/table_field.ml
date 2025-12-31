@@ -6,8 +6,8 @@ type t =
 
 let field_name_match fname tfield =
   match fname with
-  | Core.Syntax.PureFieldName column -> column = tfield.column
-  | Core.Syntax.QualifiedFieldName { alias; column } ->
+  | Core.Syntax.UnqualifiedField { column } -> column = tfield.column
+  | Core.Syntax.QualifiedField { alias; column } ->
     alias = tfield.table_alias && column = tfield.column
 ;;
 

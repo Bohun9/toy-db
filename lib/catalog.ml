@@ -16,19 +16,17 @@ let columns_metatable_path cat = metatable_path cat "columns"
 
 let tables_metatable_schema =
   Table_schema.create
-    [ { name = "name"; typ = Type.TString }
-    ; { name = "primary_key"; typ = Type.TString }
-    ]
+    [ { name = "name"; typ = Type.String }; { name = "primary_key"; typ = Type.String } ]
     None
   |> Result.get_ok
 ;;
 
 let columns_metatable_schema =
   Table_schema.create
-    ([ "table", Type.TString
-     ; "name", Type.TString
-     ; "type_id", Type.TInt
-     ; "offset", Type.TInt
+    ([ "table", Type.String
+     ; "name", Type.String
+     ; "type_id", Type.Int
+     ; "offset", Type.Int
      ]
      |> List.map (fun (name, typ) -> Syntax.{ name; typ }))
     None
@@ -40,13 +38,13 @@ type type_id = TypeId of int
 let int_of_type_id (TypeId id) = id
 
 let to_type_id = function
-  | Type.TInt -> TypeId 0
-  | Type.TString -> TypeId 1
+  | Type.Int -> TypeId 0
+  | Type.String -> TypeId 1
 ;;
 
 let from_type_id = function
-  | TypeId 0 -> Type.TInt
-  | TypeId 1 -> Type.TString
+  | TypeId 0 -> Type.Int
+  | TypeId 1 -> Type.String
   | _ -> failwith "internal error - from_type_id"
 ;;
 
@@ -209,8 +207,8 @@ let load_catalog_tables cat =
         tables
         |> List.of_seq
         |> List.map (fun (t : Tuple.t) ->
-          ( List.nth t.values 0 |> Value.value_to_string
-          , List.nth t.values 1 |> Value.value_to_string |> decode_primary_key ))
+          ( Tuple.attribute t 0 |> Value.value_to_string
+          , Tuple.attribute t 1 |> Value.value_to_string |> decode_primary_key ))
       | _ -> failwith "internal error - load_catalog_tables")
   in
   Log.log "catalog tables loaded";
@@ -226,10 +224,10 @@ let load_catalog_columns cat =
       columns
       |> List.of_seq
       |> List.map (fun (t : Tuple.t) ->
-        ( List.nth t.values 0 |> Value.value_to_string
-        , List.nth t.values 1 |> Value.value_to_string
-        , List.nth t.values 2 |> Value.value_to_int |> (fun t -> TypeId t) |> from_type_id
-        , List.nth t.values 3 |> Value.value_to_int ))
+        ( Tuple.attribute t 0 |> Value.value_to_string
+        , Tuple.attribute t 1 |> Value.value_to_string
+        , Tuple.attribute t 2 |> Value.value_to_int |> (fun t -> TypeId t) |> from_type_id
+        , Tuple.attribute t 3 |> Value.value_to_int ))
     | _ -> failwith "internal error - load_catalog_columns")
 ;;
 

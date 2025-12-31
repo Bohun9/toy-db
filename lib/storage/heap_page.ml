@@ -102,14 +102,14 @@ let insert_tuple hp t =
   match Array.find_index Option.is_none hp.slots with
   | None -> false
   | Some slot_idx ->
-    let rid = Some (Tuple.RecordID { page_no = hp.page_no; slot_idx }) in
+    let rid = Some Record_id.{ page_no = hp.page_no; slot_idx } in
     hp.slots.(slot_idx) <- Some { t with rid };
     hp.num_tuples <- hp.num_tuples + 1;
     set_dirty hp;
     true
 ;;
 
-let delete_tuple hp (Tuple.RecordID rid) =
+let delete_tuple hp (rid : Record_id.t) =
   match hp.slots.(rid.slot_idx) with
   | Some _ ->
     hp.slots.(rid.slot_idx) <- None;

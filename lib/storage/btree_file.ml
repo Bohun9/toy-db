@@ -11,7 +11,7 @@ type t =
 
 let file_path f = f.file
 let page_key f page_no = Page_key.PageKey { file = f.file; page_no }
-let get_key f t = Tuple.field t f.key_field
+let get_key f t = Tuple.attribute t f.key_field
 let fresh_page_no f = Atomic.fetch_and_add f.num_pages 1
 let num_pages f = Atomic.get f.num_pages
 let schema f = f.schema
@@ -324,7 +324,7 @@ let range_scan f interval tid =
   let rec scan_from_leaf leaf =
     Seq.append
       (Seq.filter
-         (fun t -> Value_interval.inside interval (get_key f t))
+         (fun t -> Value_interval.satisfies_lower_bound interval (get_key f t))
          (Btree_leaf_page.scan_page leaf))
       (fun () ->
          match Btree_leaf_page.next_leaf_page leaf with

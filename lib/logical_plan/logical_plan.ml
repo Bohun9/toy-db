@@ -32,7 +32,7 @@ type grouping =
       ; group_by_fields : Table_field.t list
       }
 
-type order_item =
+type order_specifier =
   { field : Field.t
   ; order : C.Syntax.order
   }
@@ -57,7 +57,7 @@ and select_stmt =
   { table_expr : table_expr
   ; predicates : (string, predicate list) Hashtbl.t
   ; grouping : grouping
-  ; order : order_item list option
+  ; order_specifiers : order_specifier list option
   ; limit : int option
   ; offset : int option
   }
@@ -71,9 +71,9 @@ type t =
 
 let agg_result_type agg_kind input_type =
   match agg_kind with
-  | C.Syntax.Count -> C.Type.TInt
-  | C.Syntax.Sum -> C.Type.TInt
-  | C.Syntax.Avg -> C.Type.TInt
+  | C.Syntax.Count -> C.Type.Int
+  | C.Syntax.Sum -> C.Type.Int
+  | C.Syntax.Avg -> C.Type.Int
   | C.Syntax.Min -> input_type
   | C.Syntax.Max -> input_type
 ;;
@@ -181,18 +181,24 @@ and build_plan_select
       Grouping { select_list; group_by_fields }, select_list_fields
   in
   let select_list_env = Field.Env.from_list select_list_fields in
-  let order =
+  let order_specifiers =
     Option.map
       (fun order_list ->
          List.map
-           (fun ({ field = field_name; order } : C.Syntax.order_item) ->
+           (fun ({ field = field_name; order } : C.Syntax.order_specifier) ->
               { field = Field.Env.resolve_field select_list_env field_name
               ; order = Option.value order ~default:C.Syntax.Asc
               })
            order_list)
       order_by
   in
-  ( { table_expr; predicates = grouped_predicates; grouping; order; limit; offset }
+  ( { table_expr
+    ; predicates = grouped_predicates
+    ; grouping
+    ; order_specifiers
+    ; limit
+    ; offset
+    }
   , select_list_fields )
 ;;
 

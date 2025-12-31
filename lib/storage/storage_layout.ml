@@ -39,8 +39,8 @@ let get_num_pages file =
 
 let value_storage_size vt =
   match vt with
-  | Type.TInt -> Value.int_size
-  | Type.TString -> Value.string_max_length
+  | Type.Int -> Value.int_size
+  | Type.String -> Value.string_max_length
 ;;
 
 let tuple_storage_size schema =
@@ -49,26 +49,26 @@ let tuple_storage_size schema =
 ;;
 
 let serialize_value b = function
-  | Value.VInt n -> Buffer.add_int64_le b (Int64.of_int n)
-  | Value.VString s ->
+  | Value.Int n -> Buffer.add_int64_le b (Int64.of_int n)
+  | Value.String s ->
     assert (String.length s <= Value.string_max_length);
     let padded = s ^ String.make (Value.string_max_length - String.length s) '\x00' in
     Buffer.add_string b padded
 ;;
 
-let serialize_tuple b (t : Tuple.t) = List.iter (serialize_value b) t.values
+let serialize_tuple b (t : Tuple.t) = List.iter (serialize_value b) t.attributes
 
 let deserialize_value c vt =
   match vt with
-  | Type.TInt -> Value.VInt (Int64.to_int (Cursor.read_int64_le c))
-  | Type.TString ->
+  | Type.Int -> Value.Int (Int64.to_int (Cursor.read_int64_le c))
+  | Type.String ->
     let raw = Cursor.read_string c Value.string_max_length in
     let s =
       match String.index_opt raw '\x00' with
       | Some i -> String.sub raw 0 i
       | None -> raw
     in
-    Value.VString s
+    Value.String s
 ;;
 
 let deserialize_values c schema =
@@ -76,7 +76,5 @@ let deserialize_values c schema =
 ;;
 
 let deserialize_tuple c schema page_no slot_idx : Tuple.t =
-  { values = deserialize_values c schema
-  ; rid = Some (Tuple.RecordID { page_no; slot_idx })
-  }
+  { attributes = deserialize_values c schema; rid = Some Record_id.{ page_no; slot_idx } }
 ;;

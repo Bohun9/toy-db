@@ -30,7 +30,7 @@ type grouping =
       ; group_by_fields : Table_field.t list
       }
 
-type order_item =
+type order_specifier =
   { field : Field.t
   ; order : Core.Syntax.order
   }
@@ -55,7 +55,7 @@ and select_stmt =
   { table_expr : table_expr
   ; predicates : (string, predicate list) Hashtbl.t
   ; grouping : grouping
-  ; order : order_item list option
+  ; order_specifiers : order_specifier list option
   ; limit : int option
   ; offset : int option
   }

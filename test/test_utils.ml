@@ -11,11 +11,11 @@ let rec shuffle = function
 ;;
 
 let counter_schema =
-  Table_schema.create [ { name = "counter"; typ = TInt } ] None |> Result.get_ok
+  Table_schema.create [ { name = "counter"; typ = Type.Int } ] None |> Result.get_ok
 ;;
 
-let make_counter_tuple n : Tuple.t = { values = [ VInt n ]; rid = None }
-let cmp_tuple (t1 : Tuple.t) (t2 : Tuple.t) = t1.values = t2.values
+let make_counter_tuple n : Tuple.t = { attributes = [ Int n ]; rid = None }
+let cmp_tuple (t1 : Tuple.t) (t2 : Tuple.t) = t1.attributes = t2.attributes
 let assert_int_eq = OUnit2.assert_equal ~printer:string_of_int
 let assert_tuple_eq = OUnit2.assert_equal ~cmp:cmp_tuple ~printer:Tuple.show
 

@@ -1,18 +1,11 @@
-type record_id =
-  | RecordID of
-      { page_no : int
-      ; slot_idx : int
-      }
-[@@deriving show]
-
 type t =
-  { values : Value.t list
-  ; rid : record_id option
+  { attributes : Value.t list
+  ; rid : Record_id.t option
   }
 [@@deriving show]
 
 type tuples = t list [@@deriving show]
 
-let trans_tuple t = { values = List.map Value.trans t; rid = None }
-let combine_tuple t1 t2 = { values = t1.values @ t2.values; rid = None }
-let field t n = List.nth t.values n
+let trans_tuple t = { attributes = List.map Value.trans t; rid = None }
+let combine_tuple t1 t2 = { attributes = t1.attributes @ t2.attributes; rid = None }
+let attribute t n = List.nth t.attributes n

@@ -32,13 +32,13 @@ let test_group_by _ =
         let tuples = List.of_seq tuples in
         U.assert_int_eq 3 (List.length tuples);
         U.assert_tuple_eq
-          T.{ values = [ V.VString "A"; V.VInt 1; V.VInt 2; V.VInt 3 ]; rid = None }
+          T.{ attributes = [ V.String "A"; V.Int 1; V.Int 2; V.Int 3 ]; rid = None }
           (List.nth tuples 0);
         U.assert_tuple_eq
-          T.{ values = [ V.VString "B"; V.VInt 2; V.VInt 4; V.VInt 6 ]; rid = None }
+          T.{ attributes = [ V.String "B"; V.Int 2; V.Int 4; V.Int 6 ]; rid = None }
           (List.nth tuples 1);
         U.assert_tuple_eq
-          T.{ values = [ V.VString "C"; V.VInt 3; V.VInt 5; V.VInt 8 ]; rid = None }
+          T.{ attributes = [ V.String "C"; V.Int 3; V.Int 5; V.Int 8 ]; rid = None }
           (List.nth tuples 2)
       | Catalog.Nothing -> failwith "internal error"))
 ;;
@@ -57,22 +57,22 @@ let test_order_by _ =
         let tuples = List.of_seq tuples in
         U.assert_int_eq 6 (List.length tuples);
         U.assert_tuple_eq
-          T.{ values = [ V.VString "A"; V.VInt 2 ]; rid = None }
+          T.{ attributes = [ V.String "A"; V.Int 2 ]; rid = None }
           (List.nth tuples 0);
         U.assert_tuple_eq
-          T.{ values = [ V.VString "A"; V.VInt 1 ]; rid = None }
+          T.{ attributes = [ V.String "A"; V.Int 1 ]; rid = None }
           (List.nth tuples 1);
         U.assert_tuple_eq
-          T.{ values = [ V.VString "B"; V.VInt 4 ]; rid = None }
+          T.{ attributes = [ V.String "B"; V.Int 4 ]; rid = None }
           (List.nth tuples 2);
         U.assert_tuple_eq
-          T.{ values = [ V.VString "B"; V.VInt 2 ]; rid = None }
+          T.{ attributes = [ V.String "B"; V.Int 2 ]; rid = None }
           (List.nth tuples 3);
         U.assert_tuple_eq
-          T.{ values = [ V.VString "C"; V.VInt 5 ]; rid = None }
+          T.{ attributes = [ V.String "C"; V.Int 5 ]; rid = None }
           (List.nth tuples 4);
         U.assert_tuple_eq
-          T.{ values = [ V.VString "C"; V.VInt 3 ]; rid = None }
+          T.{ attributes = [ V.String "C"; V.Int 3 ]; rid = None }
           (List.nth tuples 5)
       | Catalog.Nothing -> failwith "internal error"))
 ;;
@@ -92,10 +92,10 @@ let test_limit _ =
         let tuples = List.of_seq tuples in
         U.assert_int_eq 2 (List.length tuples);
         U.assert_tuple_eq
-          T.{ values = [ V.VString "A"; V.VInt 1 ]; rid = None }
+          T.{ attributes = [ V.String "A"; V.Int 1 ]; rid = None }
           (List.nth tuples 0);
         U.assert_tuple_eq
-          T.{ values = [ V.VString "B"; V.VInt 4 ]; rid = None }
+          T.{ attributes = [ V.String "B"; V.Int 4 ]; rid = None }
           (List.nth tuples 1)
       | Catalog.Nothing -> failwith "internal error"))
 ;;
@@ -115,7 +115,7 @@ let test_subquery _ =
         let tuples = List.of_seq tuples in
         U.assert_int_eq 1 (List.length tuples);
         U.assert_tuple_eq
-          T.{ values = [ V.VString "C"; V.VInt 5; V.VInt 5 ]; rid = None }
+          T.{ attributes = [ V.String "C"; V.Int 5; V.Int 5 ]; rid = None }
           (List.nth tuples 0)
       | Catalog.Nothing -> failwith "internal error"))
 ;;

@@ -6,8 +6,8 @@ type relop =
   | Gt
 
 type field_name =
-  | PureFieldName of string
-  | QualifiedFieldName of
+  | UnqualifiedField of { column : string }
+  | QualifiedField of
       { alias : string
       ; column : string
       }
@@ -20,8 +20,8 @@ type value =
 type tuple = value list
 
 let derive_value_type = function
-  | VInt _ -> Type.TInt
-  | VString _ -> Type.TString
+  | VInt _ -> Type.Int
+  | VString _ -> Type.String
 ;;
 
 let derive_tuple_type = List.map derive_value_type
@@ -57,7 +57,7 @@ type order =
   | Asc
   | Desc
 
-type order_item =
+type order_specifier =
   { field : field_name
   ; order : order option
   }
@@ -83,7 +83,7 @@ and select_stmt =
   ; table_expr : table_expr
   ; predicates : predicate list
   ; group_by : group_by option
-  ; order_by : order_item list option
+  ; order_by : order_specifier list option
   ; limit : int option
   ; offset : int option
   }

@@ -16,8 +16,8 @@ let to_table_field alias { column; typ; _ } =
 
 let field_name_match fname field =
   match fname with
-  | Core.Syntax.PureFieldName column -> column = field.column
-  | Core.Syntax.QualifiedFieldName { alias; column } ->
+  | Core.Syntax.UnqualifiedField { column } -> column = field.column
+  | Core.Syntax.QualifiedField { alias; column } ->
     Some alias = field.table_alias && column = field.column
 ;;
 

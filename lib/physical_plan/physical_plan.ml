@@ -5,7 +5,7 @@ type grouper_output_item =
   | GrouperAttribute of { group_by_index : int }
   | GrouperAggregate
 
-type order_item =
+type order_specifier =
   { order_by_expr : Expr.t
   ; order : Syntax.order
   }
@@ -45,7 +45,7 @@ type physical_plan_data =
       }
   | Sorter of
       { child : t
-      ; order : order_item list
+      ; order_specifiers : order_specifier list
       }
   | Limiter of
       { child : t
@@ -127,7 +127,8 @@ let rec build_plan_table_expr reg grouped_predicates = function
 
 and build_plan reg logical_plan =
   match logical_plan with
-  | Logical_plan.Select { table_expr; predicates; grouping; order; limit; offset } ->
+  | Logical_plan.Select
+      { table_expr; predicates; grouping; order_specifiers; limit; offset } ->
     let table_expr_pp = build_plan_table_expr reg predicates table_expr in
     let grouping_pp =
       match grouping with
@@ -167,16 +168,16 @@ and build_plan reg logical_plan =
         @@ Grouper { child = table_expr_pp; group_by_exprs; create_aggregates; output }
     in
     let order_pp =
-      match order with
-      | Some order_list ->
+      match order_specifiers with
+      | Some order_specifiers ->
         make_pp grouping_pp.desc
         @@ Sorter
              { child = grouping_pp
-             ; order =
+             ; order_specifiers =
                  List.map
-                   (fun ({ field; order } : Logical_plan.order_item) ->
+                   (fun ({ field; order } : Logical_plan.order_specifier) ->
                       { order_by_expr = Expr.of_field field grouping_pp.desc; order })
-                   order_list
+                   order_specifiers
              }
       | None -> grouping_pp
     in
@@ -218,7 +219,7 @@ let rec execute_plan' tid pp =
     Seq.empty
   | Project { child; exprs } ->
     Seq.map
-      (fun t -> Core.Tuple.{ values = eval_exprs exprs t; rid = None })
+      (fun t -> Core.Tuple.{ attributes = eval_exprs exprs t; rid = None })
       (execute_plan tid child)
   | Filter { child; e1; op; e2 } ->
     Seq.filter
@@ -267,7 +268,7 @@ let rec execute_plan' tid pp =
     |> Hashtbl.to_seq
     |> Seq.map (fun (group, aggregates) ->
       let agg_index = ref 0 in
-      let values =
+      let attributes =
         List.map
           (fun output_item ->
              match output_item with
@@ -278,26 +279,28 @@ let rec execute_plan' tid pp =
                Aggregate.finalize agg)
           output
       in
-      Core.Tuple.{ values; rid = None })
-  | Sorter { child; order } ->
-    let order_by_exprs = List.map (fun { order_by_expr; _ } -> order_by_expr) order in
-    let order_specifiers = List.map (fun { order; _ } -> order) order in
+      Core.Tuple.{ attributes; rid = None })
+  | Sorter { child; order_specifiers } ->
+    let order_by_exprs, orders =
+      List.split
+        (List.map (fun { order_by_expr; order } -> order_by_expr, order) order_specifiers)
+    in
     let tuples =
       execute_plan tid child
       |> Seq.map (fun t -> eval_exprs order_by_exprs t, t)
       |> List.of_seq
     in
     let compare (keys1, _) (keys2, _) =
-      let combined = List.combine (List.combine keys1 keys2) order_specifiers in
+      let combined = List.combine (List.combine keys1 keys2) orders in
       let rec cmp = function
         | [] -> 0
         | ((k1, k2), ord) :: rest ->
-          let op =
+          let kcompare =
             match ord with
             | Syntax.Asc -> Value.compare
             | Syntax.Desc -> Fun.flip Value.compare
           in
-          let c = op k1 k2 in
+          let c = kcompare k1 k2 in
           if c = 0 then cmp rest else c
       in
       cmp combined

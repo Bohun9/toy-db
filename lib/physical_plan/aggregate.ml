@@ -39,9 +39,9 @@ let step { state; expr } tuple =
 
 let finalize { state; _ } =
   match state with
-  | Count { cnt } -> Core.Value.VInt cnt
-  | Sum { sum } -> Core.Value.VInt sum
-  | Avg { sum; cnt } -> Core.Value.VInt (sum / cnt)
+  | Count { cnt } -> Core.Value.Int cnt
+  | Sum { sum } -> Core.Value.Int sum
+  | Avg { sum; cnt } -> Core.Value.Int (sum / cnt)
   | Min { value } -> value
   | Max { value } -> value
 ;;

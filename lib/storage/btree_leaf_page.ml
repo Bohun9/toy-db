@@ -28,7 +28,7 @@ let set_next_leaf_page (p : t) v =
 
 let min_num_tuples p = (max_num_tuples p + 1) / 2
 let num_tuples p = List.length (tuples p)
-let get_key p t = Tuple.field t (key_field p)
+let get_key p t = Tuple.attribute t (key_field p)
 let lowest_key p = get_key p (List.hd @@ tuples p)
 
 let create page_no key_field parent tuples next_leaf_page =

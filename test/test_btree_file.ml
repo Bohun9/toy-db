@@ -12,7 +12,7 @@ let test_insert _ =
         List.of_seq
           (Storage.Btree_file.range_scan
              bt
-             (Core.Value_interval.unbounded Core.Type.TInt)
+             (Core.Value_interval.unbounded Core.Type.Int)
              tid)
       in
       U.assert_int_eq num_tuples (List.length tuples);
@@ -33,7 +33,10 @@ let test_delete _ =
       List.iter (fun t -> Storage.Btree_file.delete_tuple bt t tid) deletions;
       let tuples =
         List.of_seq
-          (Storage.Btree_file.range_scan bt (Core.Value_interval.unbounded TInt) tid)
+          (Storage.Btree_file.range_scan
+             bt
+             (Core.Value_interval.unbounded Core.Type.Int)
+             tid)
       in
       U.assert_int_eq (num_tuples - num_deletions) (List.length tuples);
       List.iter2 U.assert_tuple_eq remaining_sorted tuples))

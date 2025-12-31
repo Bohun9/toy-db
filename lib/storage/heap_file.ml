@@ -112,7 +112,7 @@ let insert_tuple hf (t : Tuple.t) tid =
 
 let delete_tuple hf rid tid =
   match rid with
-  | Some (Tuple.RecordID { page_no; _ } as rid) ->
+  | Some (Record_id.{ page_no; _ } as rid) ->
     let page = get_page hf page_no tid Lock_manager.WritePerm in
     Heap_page.delete_tuple page rid
   | None -> failwith "internal error - delete_tuple"
