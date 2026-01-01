@@ -14,7 +14,7 @@ let set_root (p : t) v =
 let create root = Generic_page.create 0 { root }
 
 let serialize p =
-  let b = Buffer.create Storage_layout.page_size in
+  let b = Buffer.create Storage_layout.Page_io.page_size in
   Buffer.add_int64_le b (root p |> Int64.of_int);
   Buffer.to_bytes b
 ;;

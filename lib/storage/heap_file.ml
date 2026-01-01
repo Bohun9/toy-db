@@ -1,125 +1,118 @@
-open Core
-open Metadata
-
-type page = Heap_page.t
+module C = Core
+module M = Metadata
 
 type t =
   { file : string
-  ; schema : Table_schema.t
+  ; schema : M.Table_schema.t
   ; buf_pool : Buffer_pool.t
-  ; num_pages : int Atomic.t
   }
 
 let file_path f = f.file
-let num_pages hf = Atomic.get hf.num_pages
-let incr_num_pages hf = Atomic.incr hf.num_pages
-let page_key hf page_no = Page_key.PageKey { file = hf.file; page_no }
+let schema f = f.schema
+let page_key f page_no = { Page_key.file = f.file; page_no }
 
-let load_heap_page hf page_no =
-  let offset = page_no * Heap_page.page_size in
-  In_channel.with_open_bin hf.file (fun ic ->
-    In_channel.seek ic (Int64.of_int offset);
-    let data = Bytes.create Heap_page.page_size in
-    (match In_channel.really_input ic data 0 (Bytes.length data) with
-     | Some _ -> ()
-     | None -> failwith "internal error - load_heap_page");
-    Heap_page.deserialize page_no hf.schema data)
+let load_header_page f =
+  Storage_layout.Page_io.read_page f.file 0
+  |> Heap_header_page.deserialize 0
+  |> fun p -> Db_page.DB_HeapPage (Heap_page.HeaderPage p)
 ;;
 
-let load_page hf page_no = Db_page.DB_HeapPage (load_heap_page hf page_no)
-
-let flush_heap_page hf (hp : Heap_page.t) =
-  let offset = hp.page_no * Heap_page.page_size in
-  Out_channel.with_open_bin hf.file (fun oc ->
-    Out_channel.seek oc (Int64.of_int offset);
-    Out_channel.output_bytes oc (Heap_page.serialize hp));
-  Heap_page.clear_dirty hp
+let load_data_page f page_no =
+  Storage_layout.Page_io.read_page f.file page_no
+  |> Heap_data_page.deserialize page_no f.schema
+  |> fun p -> Db_page.DB_HeapPage (Heap_page.DataPage p)
 ;;
 
-let flush_page hf dbp =
-  match dbp with
-  | Db_page.DB_HeapPage hp -> flush_heap_page hf hp
-  | _ -> failwith "internal error - flush_page"
+let flush_heap_page f p =
+  Heap_page.serialize p |> Storage_layout.Page_io.write_page f.file (Heap_page.page_no p)
 ;;
 
-(* Handle phantom-read case where the writing transaction adds a new page.
-   This ensures there are no data races when the file has no pages, as the
-   later transactions will always block on the first page. *)
-let ensure_at_least_one_page hf =
-  if num_pages hf = 0
-  then (
-    let hp = Heap_page.create 0 hf.schema in
-    flush_heap_page hf hp)
+let flush_header_page f p = flush_heap_page f (Heap_page.HeaderPage p)
+let flush_data_page f p = flush_heap_page f (Heap_page.DataPage p)
+
+let flush_page f = function
+  | Db_page.DB_HeapPage p -> flush_heap_page f p
+  | _ -> failwith "internal error"
+;;
+
+let initialize f =
+  let header = Heap_header_page.create 0 0 in
+  flush_header_page f header
 ;;
 
 let create file schema buf_pool =
-  let len =
-    In_channel.with_open_gen [ In_channel.Open_creat ] 0o666 file (fun ic ->
-      Int64.to_int (In_channel.length ic))
+  let f = { file; schema; buf_pool } in
+  let num_pages = Storage_layout.Page_io.num_pages file in
+  if num_pages = 0 then initialize f;
+  f
+;;
+
+let get_page f page_no tid perm load flush =
+  let db_page =
+    Buffer_pool.get_page f.buf_pool (page_key f page_no) tid perm load flush
   in
-  assert (len mod Heap_page.page_size = 0);
-  let num_pages = len / Heap_page.page_size in
-  let hf = { file; schema; buf_pool; num_pages = Atomic.make num_pages } in
-  ensure_at_least_one_page hf;
-  hf
+  match db_page with
+  | DB_HeapPage p -> p
+  | _ -> failwith "internal error"
 ;;
 
-let get_page hf page_no tid perm =
-  let page =
-    Buffer_pool.get_page
-      hf.buf_pool
-      (page_key hf page_no)
-      tid
-      perm
-      (fun () -> load_page hf page_no)
-      (flush_page hf)
+let get_header_page f tid perm =
+  let heap_page = get_page f 0 tid perm (fun () -> load_header_page f) (flush_page f) in
+  match heap_page with
+  | Heap_page.HeaderPage p -> p
+  | _ -> failwith "internal error"
+;;
+
+let get_data_page f page_no tid perm =
+  let heap_page =
+    get_page f page_no tid perm (fun () -> load_data_page f page_no) (flush_page f)
   in
-  match page with
-  | DB_HeapPage hp -> hp
-  | _ -> failwith "internal error - get_page"
+  match heap_page with
+  | Heap_page.DataPage p -> p
+  | _ -> failwith "internal error"
 ;;
 
-(* let check_tuple_type hf (t : Tuple.t) = *)
-(*   if not (Tuple.match_desc hf.desc t.desc) then raise Error.type_mismatch *)
-(* ;; *)
-
-(* The number of pages may increase during iteration in
-   [insert_tuple] and [scan_file], so this function is required. *)
-let seq_dynamic_init size_fn f =
-  let rec iter i () = if i = size_fn () then Seq.Nil else Seq.Cons (f i, iter (i + 1)) in
-  iter 0
+let get_num_data_pages f tid =
+  let h = get_header_page f tid Lock_manager.ReadPerm in
+  Heap_header_page.num_data_pages h
 ;;
 
-let schema f = f.schema
+let set_num_data_pages f v tid =
+  let h = get_header_page f tid Lock_manager.WritePerm in
+  Heap_header_page.set_num_data_pages h v
+;;
 
-let insert_tuple hf (t : Tuple.t) tid =
-  (* check_tuple_type hf t; *)
-  (* let t = Tuple.set_tuple_desc t hf.desc in *)
-  let pages = seq_dynamic_init (fun () -> num_pages hf) Fun.id in
-  match
-    Seq.find
-      (fun page_no ->
-         Heap_page.insert_tuple (get_page hf page_no tid Lock_manager.WritePerm) t)
-      pages
-  with
-  | Some _ -> ()
+let data_page_numbers n = List.init n (fun n -> n + 1)
+
+let insert_tuple f t tid =
+  let num_data_pages = get_num_data_pages f tid in
+  let target_page_no =
+    data_page_numbers num_data_pages
+    |> List.find_opt (fun page_no ->
+      let p = get_data_page f page_no tid Lock_manager.ReadPerm in
+      Heap_data_page.has_empty_slot p)
+  in
+  match target_page_no with
+  | Some page_no ->
+    let p = get_data_page f page_no tid Lock_manager.WritePerm in
+    Heap_data_page.insert_tuple p t
   | None ->
-    let new_page = Heap_page.create (num_pages hf) hf.schema in
-    incr_num_pages hf;
-    assert (Heap_page.insert_tuple new_page t);
-    flush_heap_page hf new_page
+    set_num_data_pages f (num_data_pages + 1) tid;
+    let new_page = Heap_data_page.create (num_data_pages + 1) f.schema in
+    Heap_data_page.insert_tuple new_page t;
+    flush_data_page f new_page
 ;;
 
-let delete_tuple hf rid tid =
-  match rid with
-  | Some (Record_id.{ page_no; _ } as rid) ->
-    let page = get_page hf page_no tid Lock_manager.WritePerm in
-    Heap_page.delete_tuple page rid
-  | None -> failwith "internal error - delete_tuple"
+let delete_tuple f rid tid =
+  let (C.Record_id.{ page_no; _ } as rid) = Option.get rid in
+  let p = get_data_page f page_no tid Lock_manager.WritePerm in
+  Heap_data_page.delete_tuple p rid
 ;;
 
-let scan_file hf tid =
-  seq_dynamic_init (fun () -> num_pages hf) Fun.id
+let scan_file f tid =
+  data_page_numbers (get_num_data_pages f tid)
+  |> List.to_seq
   |> Seq.flat_map (fun page_no ->
-    Heap_page.scan_page (get_page hf page_no tid Lock_manager.ReadPerm))
+    let p = get_data_page f page_no tid Lock_manager.ReadPerm in
+    Heap_data_page.scan_page p)
 ;;

@@ -45,14 +45,14 @@ let decode_next_leaf_page p =
 ;;
 
 let serialize p =
-  let b = Buffer.create Storage_layout.page_size in
+  let b = Buffer.create Storage_layout.Page_io.page_size in
   Buffer.add_char b node_type_id;
   Buffer.add_int64_le
     b
     (Btree_node.parent_opt p |> Btree_node.encode_parent |> Int64.of_int);
   Buffer.add_int64_le b (encode_next_leaf_page p |> Int64.of_int);
   Buffer.add_int16_le b (num_tuples p);
-  List.iter (Storage_layout.serialize_tuple b) (tuples p);
+  List.iter (Storage_layout.Codec.serialize_tuple b) (tuples p);
   Buffer.to_bytes b
 ;;
 
@@ -63,7 +63,9 @@ let deserialize page_no schema key_field data =
   let parent = Cursor.read_int64_le c |> Int64.to_int |> Btree_node.decode_parent in
   let next_leaf_page = Cursor.read_int64_le c |> Int64.to_int |> decode_next_leaf_page in
   let num_tuples = Cursor.read_int16_le c in
-  let tuples = List.init num_tuples (Storage_layout.deserialize_tuple c schema page_no) in
+  let tuples =
+    List.init num_tuples (Storage_layout.Codec.deserialize_tuple c schema page_no)
+  in
   create page_no key_field parent tuples next_leaf_page
 ;;
 

@@ -45,13 +45,13 @@ let find_child p k =
 
 let serialize p =
   assert (num_children p = num_keys p + 1);
-  let b = Buffer.create Storage_layout.page_size in
+  let b = Buffer.create Storage_layout.Page_io.page_size in
   Buffer.add_char b node_type_id;
   Buffer.add_int64_le
     b
     (Btree_node.parent_opt p |> Btree_node.encode_parent |> Int64.of_int);
   Buffer.add_int16_le b (num_keys p);
-  List.iter (Storage_layout.serialize_value b) (keys p);
+  List.iter (Storage_layout.Codec.serialize_value b) (keys p);
   List.iter (fun child -> Buffer.add_int64_le b (Int64.of_int child)) (children p);
   Buffer.to_bytes b
 ;;
@@ -62,7 +62,9 @@ let deserialize page_no key_type data =
   assert (node_type = node_type_id);
   let parent = Cursor.read_int64_le c |> Int64.to_int |> Btree_node.decode_parent in
   let num_keys = Cursor.read_int16_le c in
-  let keys = List.init num_keys (fun _ -> Storage_layout.deserialize_value c key_type) in
+  let keys =
+    List.init num_keys (fun _ -> Storage_layout.Codec.deserialize_value c key_type)
+  in
   let children =
     List.init (num_keys + 1) (fun _ -> Cursor.read_int64_le c |> Int64.to_int)
   in
