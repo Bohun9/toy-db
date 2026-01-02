@@ -14,16 +14,17 @@ let serialize = function
   | NodePage (LeafPage p) -> Btree_leaf_page.serialize p
 ;;
 
-let deserialize page_no schema key_field data =
+let deserialize page_no sch key_field data =
   match Bytes.get data 0 with
   | c when c = Btree_internal_page.internal_id ->
     Btree_internal_page.deserialize
       page_no
-      (Table_schema.column_type schema key_field)
+      sch
+      (Table_schema.column_type sch key_field)
       data
     |> fun p -> InternalPage p
   | c when c = Btree_leaf_page.leaf_id ->
-    Btree_leaf_page.deserialize page_no schema key_field data |> fun p -> LeafPage p
+    Btree_leaf_page.deserialize page_no sch key_field data |> fun p -> LeafPage p
   | _ -> failwith "internal error"
 ;;
 

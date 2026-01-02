@@ -70,7 +70,7 @@ let serialize p =
   Buffer.to_bytes b
 ;;
 
-let deserialize page_no schema key_field data =
+let deserialize page_no sch key_field data =
   let c = Cursor.create data in
   assert (Cursor.read_char c = leaf_id);
   let parent = Cursor.read_int64_le c |> Int64.to_int |> Btree_node.decode_parent in
@@ -79,9 +79,9 @@ let deserialize page_no schema key_field data =
   let max_num_tuples = 2 in
   let tuples = Array.make (max_num_tuples + 1) C.Tuple.{ attributes = []; rid = None } in
   for i = 0 to num_tuples - 1 do
-    tuples.(i) <- Storage_layout.Codec.deserialize_tuple c schema page_no i
+    tuples.(i) <- Storage_layout.Codec.deserialize_tuple c sch page_no i
   done;
-  create page_no schema key_field parent (Some { tuples; num_tuples }) next_leaf
+  create page_no sch key_field parent (Some { tuples; num_tuples }) next_leaf
 ;;
 
 type insert_result =
@@ -102,6 +102,11 @@ let shift_tuples_right p from =
   Array.blit (tuples p) from (tuples p) (from + 1) len
 ;;
 
+let shift_tuples_left p from =
+  let len = num_tuples p - from in
+  Array.blit (tuples p) from (tuples p) (from - 1) len
+;;
+
 let insert_tuple p t =
   let key = key_of_tuple p t in
   let pos = find_key_pos p key in
@@ -112,12 +117,12 @@ let insert_tuple p t =
   if num_tuples p <= max_num_tuples p
   then Inserted
   else (
-    let half1 = num_tuples p / 2 in
-    let half2 = num_tuples p - half1 in
+    let size1 = num_tuples p / 2 in
+    let size2 = num_tuples p - size1 in
     let tuples2 = Array.copy tuples in
-    Array.blit tuples half1 tuples2 0 half2;
-    set_num_tuples p half1;
-    Split { tuples = tuples2; num_tuples = half2 })
+    Array.blit tuples size1 tuples2 0 size2;
+    set_num_tuples p size1;
+    Split { tuples = tuples2; num_tuples = size2 })
 ;;
 
 let insert_tuple_no_split p t =
@@ -141,12 +146,8 @@ let coalesce p1 p2 =
   set_next_leaf p1 (next_leaf p2)
 ;;
 
-let shift_tuples_left p from =
-  let len = num_tuples p - from in
-  Array.blit (tuples p) from (tuples p) (from - 1) len
-;;
-
 let delete_tuple_at p pos =
+  assert (num_tuples p > 0);
   let t = tuple p pos in
   shift_tuples_left p (pos + 1);
   set_num_tuples p (num_tuples p - 1);
@@ -159,6 +160,7 @@ let delete_highest_tuple p = delete_tuple_at p (num_tuples p - 1)
 let delete_tuple p t is_root =
   let key = key_of_tuple p t in
   let pos = find_key_pos p key in
+  assert (pos < num_tuples p);
   delete_tuple_at p pos |> ignore;
   if (not is_root) && num_tuples p < min_num_tuples p then Underfull else Deleted
 ;;

@@ -150,9 +150,9 @@ let create_leaf_node f parent tuples_info next_leaf_page tid =
   get_leaf_page f page_no tid Lock_manager.WritePerm
 ;;
 
-let create_internal_node f parent keys children tid =
+let create_internal_node f parent create_data tid =
   let page_no = fresh_page_no f in
-  let new_internal = Btree_internal_page.create page_no parent keys children in
+  let new_internal = Btree_internal_page.create page_no f.schema parent create_data in
   flush_internal_page f new_internal;
   get_internal_page f page_no tid Lock_manager.WritePerm
 ;;
@@ -174,7 +174,13 @@ let rec insert_in_parent f n1 k n2 tid =
   if is_root f n1 tid
   then (
     let children = [ node_page_no n1; n2 ] in
-    let new_root = create_internal_node f None [ k ] children tid in
+    let new_root =
+      create_internal_node
+        f
+        None
+        (RootData { child1 = node_page_no n1; key = k; child2 = n2 })
+        tid
+    in
     let new_root_page_no = Btree_node.page_no new_root in
     update_parent_pointers f children new_root_page_no tid;
     set_root f new_root_page_no tid)
@@ -182,10 +188,16 @@ let rec insert_in_parent f n1 k n2 tid =
     let p1 = get_parent_write f n1 tid in
     match Btree_internal_page.insert_entry p1 k n2 with
     | Btree_internal_page.Inserted -> ()
-    | Btree_internal_page.Split { sep_key; keys; children } ->
+    | Btree_internal_page.Split { sep_key; internal_data } ->
       Log.log "btree internal split";
-      let p2 = create_internal_node f (Btree_node.parent_opt p1) keys children tid in
-      update_parent_pointers f children (Btree_node.page_no p2) tid;
+      let p2 =
+        create_internal_node f (Btree_node.parent_opt p1) (InternalData internal_data) tid
+      in
+      update_parent_pointers
+        f
+        (Btree_internal_page.get_children internal_data)
+        (Btree_node.page_no p2)
+        tid;
       insert_in_parent f (Btree_page.InternalPage p1) sep_key (Btree_node.page_no p2) tid)
 ;;
 
@@ -276,7 +288,7 @@ let rec delete_entry f internal k child tid =
       let borrowed_key, borrowed_child =
         Btree_internal_page.delete_highest_entry sibling.internal
       in
-      Btree_internal_page.insert_entry_at_beggining
+      Btree_internal_page.insert_entry_at_beginning
         internal
         borrowed_child
         sibling.sep_key;
