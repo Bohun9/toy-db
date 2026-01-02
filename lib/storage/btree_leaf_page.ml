@@ -1,44 +1,56 @@
-open Core
+module C = Core
 
-let node_type_id = '1'
+let leaf_id = 'L'
 
 type leaf_data =
-  { max_num_tuples : int
-  ; key_field : int
-  ; mutable tuples : Tuple.t list
-  ; mutable next_leaf_page : int option
+  { key_attribute : int
+  ; tuples : C.Tuple.t Array.t
+  ; mutable num_tuples : int
+  ; mutable next_leaf : int option
   }
 
 type t = leaf_data Generic_page.t Btree_node.t
 
-let max_num_tuples (p : t) = p.data.data.max_num_tuples
-let key_field (p : t) = p.data.data.key_field
+let key_attribute (p : t) = p.data.data.key_attribute
 let tuples (p : t) = p.data.data.tuples
-let next_leaf_page (p : t) = p.data.data.next_leaf_page
+let num_tuples (p : t) = p.data.data.num_tuples
+let next_leaf (p : t) = p.data.data.next_leaf
 
-let set_tuples (p : t) v =
-  p.data.data.tuples <- v;
+let set_next_leaf (p : t) v =
+  p.data.data.next_leaf <- v;
   Btree_node.set_dirty p
 ;;
 
-let set_next_leaf_page (p : t) v =
-  p.data.data.next_leaf_page <- v;
+let set_num_tuples (p : t) v =
+  p.data.data.num_tuples <- v;
   Btree_node.set_dirty p
 ;;
 
+let max_num_tuples p = Array.length (tuples p) - 1
 let min_num_tuples p = (max_num_tuples p + 1) / 2
-let num_tuples p = List.length (tuples p)
-let get_key p t = Tuple.attribute t (key_field p)
-let lowest_key p = get_key p (List.hd @@ tuples p)
+let key_of_tuple p t = C.Tuple.attribute t (key_attribute p)
+let tuple p i = (tuples p).(i)
+let lowest_key p = key_of_tuple p (tuple p 0)
 
-let create page_no key_field parent tuples next_leaf_page =
+type tuples_info =
+  { tuples : C.Tuple.t Array.t
+  ; num_tuples : int
+  }
+
+let create page_no sch key_attribute parent tuples_info next_leaf =
+  let max_num_tuples = 2 in
+  let tuples, num_tuples =
+    match tuples_info with
+    | Some { tuples; num_tuples } -> tuples, num_tuples
+    | None -> Array.make (max_num_tuples + 1) C.Tuple.{ attributes = []; rid = None }, 0
+  in
   Btree_node.create parent
-  @@ Generic_page.create page_no { max_num_tuples = 2; key_field; tuples; next_leaf_page }
+  @@ Generic_page.create page_no { key_attribute; tuples; num_tuples; next_leaf }
 ;;
 
-let encode_next_leaf_page p = Option.value (next_leaf_page p) ~default:0
+let encode_next_leaf p = Option.value (next_leaf p) ~default:0
 
-let decode_next_leaf_page p =
+let decode_next_leaf p =
   match p with
   | 0 -> None
   | p -> Some p
@@ -46,53 +58,66 @@ let decode_next_leaf_page p =
 
 let serialize p =
   let b = Buffer.create Storage_layout.Page_io.page_size in
-  Buffer.add_char b node_type_id;
+  Buffer.add_char b leaf_id;
   Buffer.add_int64_le
     b
     (Btree_node.parent_opt p |> Btree_node.encode_parent |> Int64.of_int);
-  Buffer.add_int64_le b (encode_next_leaf_page p |> Int64.of_int);
+  Buffer.add_int64_le b (encode_next_leaf p |> Int64.of_int);
   Buffer.add_int16_le b (num_tuples p);
-  List.iter (Storage_layout.Codec.serialize_tuple b) (tuples p);
+  for i = 0 to num_tuples p - 1 do
+    Storage_layout.Codec.serialize_tuple b (tuple p i)
+  done;
   Buffer.to_bytes b
 ;;
 
 let deserialize page_no schema key_field data =
   let c = Cursor.create data in
-  let node_type = Cursor.read_char c in
-  assert (node_type = node_type_id);
+  assert (Cursor.read_char c = leaf_id);
   let parent = Cursor.read_int64_le c |> Int64.to_int |> Btree_node.decode_parent in
-  let next_leaf_page = Cursor.read_int64_le c |> Int64.to_int |> decode_next_leaf_page in
+  let next_leaf = Cursor.read_int64_le c |> Int64.to_int |> decode_next_leaf in
   let num_tuples = Cursor.read_int16_le c in
-  let tuples =
-    List.init num_tuples (Storage_layout.Codec.deserialize_tuple c schema page_no)
-  in
-  create page_no key_field parent tuples next_leaf_page
+  let max_num_tuples = 2 in
+  let tuples = Array.make (max_num_tuples + 1) C.Tuple.{ attributes = []; rid = None } in
+  for i = 0 to num_tuples - 1 do
+    tuples.(i) <- Storage_layout.Codec.deserialize_tuple c schema page_no i
+  done;
+  create page_no schema key_field parent (Some { tuples; num_tuples }) next_leaf
 ;;
 
 type insert_result =
   | Inserted
-  | Split of Tuple.t list
+  | Split of tuples_info
 
-let split_at i xs = List.take i xs, List.drop i xs
-
-let insert_tuple (p : t) t =
-  let k = get_key p t in
-  let new_tuples =
-    match List.find_index (fun t -> Value.eval_lt k (get_key p t)) (tuples p) with
-    | Some i ->
-      let l, r = split_at i (tuples p) in
-      l @ (t :: r)
-    | None -> tuples p @ [ t ]
+let find_key_pos p k =
+  let rec loop i =
+    if i = num_tuples p || C.Value.eval_le k (key_of_tuple p (tuple p i))
+    then i
+    else loop (i + 1)
   in
+  loop 0
+;;
+
+let shift_tuples_right p from =
+  let len = num_tuples p - from in
+  Array.blit (tuples p) from (tuples p) (from + 1) len
+;;
+
+let insert_tuple p t =
+  let key = key_of_tuple p t in
+  let pos = find_key_pos p key in
+  let tuples = tuples p in
+  shift_tuples_right p pos;
+  tuples.(pos) <- t;
+  set_num_tuples p (num_tuples p + 1);
   if num_tuples p <= max_num_tuples p
-  then (
-    set_tuples p new_tuples;
-    Inserted)
+  then Inserted
   else (
-    let half = List.length new_tuples / 2 in
-    let l, r = split_at half new_tuples in
-    set_tuples p l;
-    Split r)
+    let half1 = num_tuples p / 2 in
+    let half2 = num_tuples p - half1 in
+    let tuples2 = Array.copy tuples in
+    Array.blit tuples half1 tuples2 0 half2;
+    set_num_tuples p half1;
+    Split { tuples = tuples2; num_tuples = half2 })
 ;;
 
 let insert_tuple_no_split p t =
@@ -111,28 +136,31 @@ let can_coalesce p1 p2 =
 ;;
 
 let coalesce p1 p2 =
-  List.iter (insert_tuple_no_split p1) (tuples p2);
-  set_next_leaf_page p1 (next_leaf_page p2)
+  Array.blit (tuples p2) 0 (tuples p1) (num_tuples p1) (num_tuples p2);
+  set_num_tuples p1 (num_tuples p1 + num_tuples p2);
+  set_next_leaf p1 (next_leaf p2)
 ;;
 
-let delete_lowest_tuple p =
-  let lowest_tuple = List.hd (tuples p) in
-  set_tuples p (List.tl (tuples p));
-  lowest_tuple
+let shift_tuples_left p from =
+  let len = num_tuples p - from in
+  Array.blit (tuples p) from (tuples p) (from - 1) len
 ;;
 
-let delete_highest_tuple p =
-  let highest_tuple = List.nth (tuples p) (List.length (tuples p) - 1) in
-  set_tuples p @@ List.take (List.length (tuples p) - 1) (tuples p);
-  highest_tuple
+let delete_tuple_at p pos =
+  let t = tuple p pos in
+  shift_tuples_left p (pos + 1);
+  set_num_tuples p (num_tuples p - 1);
+  t
 ;;
+
+let delete_lowest_tuple p = delete_tuple_at p 0
+let delete_highest_tuple p = delete_tuple_at p (num_tuples p - 1)
 
 let delete_tuple p t is_root =
-  let k = get_key p t in
-  let new_tuples = List.filter (fun t -> k <> get_key p t) (tuples p) in
-  assert (List.length new_tuples + 1 = List.length (tuples p));
-  set_tuples p new_tuples;
-  if is_root || min_num_tuples p <= num_tuples p then Deleted else Underfull
+  let key = key_of_tuple p t in
+  let pos = find_key_pos p key in
+  delete_tuple_at p pos |> ignore;
+  if (not is_root) && num_tuples p < min_num_tuples p then Underfull else Deleted
 ;;
 
-let scan_page p = List.to_seq (tuples p)
+let scan_page p = tuples p |> Array.to_seq |> Seq.take (num_tuples p)

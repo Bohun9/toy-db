@@ -42,7 +42,7 @@ let initialize f key_field =
   assert (header_page_no = 0);
   assert (root_page_no = 1);
   let header = Btree_header_page.create root_page_no in
-  let root = Btree_leaf_page.create root_page_no key_field None [] None in
+  let root = Btree_leaf_page.create root_page_no f.schema key_field None None None in
   flush_header_page f header;
   flush_leaf_page f root
 ;;
@@ -135,10 +135,16 @@ let find_leaf f k tid perm =
   go root
 ;;
 
-let create_leaf_node f parent tuples next_leaf_page tid =
+let create_leaf_node f parent tuples_info next_leaf_page tid =
   let page_no = fresh_page_no f in
   let new_leaf =
-    Btree_leaf_page.create page_no f.key_field parent tuples next_leaf_page
+    Btree_leaf_page.create
+      page_no
+      f.schema
+      f.key_field
+      parent
+      (Some tuples_info)
+      next_leaf_page
   in
   flush_leaf_page f new_leaf;
   get_leaf_page f page_no tid Lock_manager.WritePerm
@@ -164,25 +170,23 @@ let update_parent_pointers f children father tid =
     children
 ;;
 
-(* [n'] was created from splitting [n].
-   Insert ([k], [n']) into the parent of [n]. *)
-let rec insert_in_parent f n k n' tid =
-  if is_root f n tid
+let rec insert_in_parent f n1 k n2 tid =
+  if is_root f n1 tid
   then (
-    let children = [ node_page_no n; n' ] in
+    let children = [ node_page_no n1; n2 ] in
     let new_root = create_internal_node f None [ k ] children tid in
     let new_root_page_no = Btree_node.page_no new_root in
     update_parent_pointers f children new_root_page_no tid;
     set_root f new_root_page_no tid)
   else (
-    let p = get_parent_write f n tid in
-    match Btree_internal_page.insert_entry p k n' with
+    let p1 = get_parent_write f n1 tid in
+    match Btree_internal_page.insert_entry p1 k n2 with
     | Btree_internal_page.Inserted -> ()
     | Btree_internal_page.Split { sep_key; keys; children } ->
       Log.log "btree internal split";
-      let p' = create_internal_node f (Btree_node.parent_opt p) keys children tid in
-      update_parent_pointers f children (Btree_node.page_no p') tid;
-      insert_in_parent f (Btree_page.InternalPage p) sep_key (Btree_node.page_no p') tid)
+      let p2 = create_internal_node f (Btree_node.parent_opt p1) keys children tid in
+      update_parent_pointers f children (Btree_node.page_no p2) tid;
+      insert_in_parent f (Btree_page.InternalPage p1) sep_key (Btree_node.page_no p2) tid)
 ;;
 
 let insert_tuple f t tid =
@@ -190,17 +194,17 @@ let insert_tuple f t tid =
   let leaf = find_leaf f k tid Lock_manager.WritePerm in
   match Btree_leaf_page.insert_tuple leaf t with
   | Btree_leaf_page.Inserted -> ()
-  | Btree_leaf_page.Split new_leaf_tuples ->
+  | Btree_leaf_page.Split tuples_info ->
     Log.log "btree leaf split";
     let new_leaf =
       create_leaf_node
         f
         (Btree_node.parent_opt leaf)
-        new_leaf_tuples
-        (Btree_leaf_page.next_leaf_page leaf)
+        tuples_info
+        (Btree_leaf_page.next_leaf leaf)
         tid
     in
-    Btree_leaf_page.set_next_leaf_page leaf (Some (Btree_node.page_no new_leaf));
+    Btree_leaf_page.set_next_leaf leaf (Some (Btree_node.page_no new_leaf));
     insert_in_parent
       f
       (Btree_page.LeafPage leaf)
@@ -329,7 +333,7 @@ let range_scan f interval tid =
          (fun t -> Value_interval.satisfies_lower_bound interval (get_key f t))
          (Btree_leaf_page.scan_page leaf))
       (fun () ->
-         match Btree_leaf_page.next_leaf_page leaf with
+         match Btree_leaf_page.next_leaf leaf with
          | Some next_page_no ->
            let next_leaf = get_leaf_page f next_page_no tid Lock_manager.ReadPerm in
            scan_from_leaf next_leaf ()

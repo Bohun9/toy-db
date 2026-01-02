@@ -1,6 +1,6 @@
 open Core
 
-let node_type_id = '0'
+let internal_id = 'I'
 
 (*
    p_0 | k_0 | p_1 | k_1 | ... | p_{m-1} | k_{m-1} | p_m
@@ -46,7 +46,7 @@ let find_child p k =
 let serialize p =
   assert (num_children p = num_keys p + 1);
   let b = Buffer.create Storage_layout.Page_io.page_size in
-  Buffer.add_char b node_type_id;
+  Buffer.add_char b internal_id;
   Buffer.add_int64_le
     b
     (Btree_node.parent_opt p |> Btree_node.encode_parent |> Int64.of_int);
@@ -58,8 +58,7 @@ let serialize p =
 
 let deserialize page_no key_type data =
   let c = Cursor.create data in
-  let node_type = Cursor.read_char c in
-  assert (node_type = node_type_id);
+  assert (Cursor.read_char c = internal_id);
   let parent = Cursor.read_int64_le c |> Int64.to_int |> Btree_node.decode_parent in
   let num_keys = Cursor.read_int16_le c in
   let keys =

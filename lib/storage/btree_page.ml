@@ -16,13 +16,13 @@ let serialize = function
 
 let deserialize page_no schema key_field data =
   match Bytes.get data 0 with
-  | c when c = Btree_internal_page.node_type_id ->
+  | c when c = Btree_internal_page.internal_id ->
     Btree_internal_page.deserialize
       page_no
       (Table_schema.column_type schema key_field)
       data
     |> fun p -> InternalPage p
-  | c when c = Btree_leaf_page.node_type_id ->
+  | c when c = Btree_leaf_page.leaf_id ->
     Btree_leaf_page.deserialize page_no schema key_field data |> fun p -> LeafPage p
   | _ -> failwith "internal error"
 ;;
