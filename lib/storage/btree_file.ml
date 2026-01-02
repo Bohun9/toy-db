@@ -1,360 +1,362 @@
-open Core
-open Metadata
+module C = Core
+module M = Metadata
+module Page = Btree_page
+module Header = Btree_header_page
+module Internal = Btree_internal_page
+module Leaf = Btree_leaf_page
+module Node = Btree_node
+
+let log = C.Log.log
 
 type t =
   { file : string
-  ; schema : Table_schema.t
+  ; schema : M.Table_schema.t
   ; buf_pool : Buffer_pool.t
   ; num_pages : int Atomic.t
-  ; key_field : int
+  ; key_attribute : int
   }
 
 let file_path f = f.file
-let page_key f page_no = { Page_key.file = f.file; page_no }
-let get_key f t = Tuple.attribute t f.key_field
-let fresh_page_no f = Atomic.fetch_and_add f.num_pages 1
-let num_pages f = Atomic.get f.num_pages
 let schema f = f.schema
+let fresh_page_no f = Atomic.fetch_and_add f.num_pages 1
+let page_key f page_no = { Page_key.file = f.file; page_no }
+let key_info f = List.nth (M.Table_schema.columns f.schema) f.key_attribute
 
 let flush_btree_page f p =
-  p
-  |> Btree_page.serialize
-  |> Storage_layout.Page_io.write_page f.file (Btree_page.page_no p);
-  Btree_page.clear_dirty p
+  p |> Page.serialize |> Storage_layout.Page_io.write_page f.file (Page.page_no p);
+  Page.clear_dirty p
 ;;
 
-let flush_header_page f p = flush_btree_page f (Btree_page.HeaderPage p)
-
-let flush_internal_page f p =
-  flush_btree_page f (Btree_page.NodePage (Btree_page.InternalPage p))
-;;
-
-let flush_leaf_page f p = flush_btree_page f (Btree_page.NodePage (Btree_page.LeafPage p))
+let flush_header_page f p = flush_btree_page f (Page.HeaderPage p)
+let flush_internal_page f p = flush_btree_page f (Page.NodePage (Page.InternalPage p))
+let flush_leaf_page f p = flush_btree_page f (Page.NodePage (Page.LeafPage p))
 
 let flush_page f = function
   | Db_page.DB_BTreePage p -> flush_btree_page f p
   | _ -> failwith "internal error"
 ;;
 
-let initialize f key_field =
+let initialize f key_attribute =
   let header_page_no = fresh_page_no f in
   let root_page_no = fresh_page_no f in
   assert (header_page_no = 0);
   assert (root_page_no = 1);
-  let header = Btree_header_page.create root_page_no in
-  let root = Btree_leaf_page.create root_page_no f.schema key_field None None None in
+  let header = Header.create header_page_no root_page_no in
+  let root = Leaf.create root_page_no f.schema key_attribute None None None in
   flush_header_page f header;
   flush_leaf_page f root
 ;;
 
-let create file schema buf_pool key_field =
+let create file schema buf_pool key_attribute =
   let num_pages = Storage_layout.Page_io.num_pages file in
-  let f = { file; schema; buf_pool; num_pages = Atomic.make num_pages; key_field } in
-  if num_pages = 0 then initialize f key_field;
+  let f = { file; schema; buf_pool; num_pages = Atomic.make num_pages; key_attribute } in
+  if num_pages = 0 then initialize f key_attribute;
   f
 ;;
 
 let load_header_page f =
   Storage_layout.Page_io.read_page f.file 0
-  |> Btree_header_page.deserialize
-  |> fun p -> Btree_page.HeaderPage p |> fun p -> Db_page.DB_BTreePage p
+  |> Header.deserialize 0
+  |> fun p -> Db_page.DB_BTreePage (Page.HeaderPage p)
 ;;
 
 let load_node_page f page_no =
   Storage_layout.Page_io.read_page f.file page_no
-  |> Btree_page.deserialize page_no f.schema f.key_field
-  |> fun p -> Btree_page.NodePage p |> fun p -> Db_page.DB_BTreePage p
+  |> Page.deserialize page_no f.schema f.key_attribute
+  |> fun p -> Db_page.DB_BTreePage (Page.NodePage p)
 ;;
 
-let get_page f page_no tid perm load_page flush_page =
-  let db_page =
-    Buffer_pool.get_page f.buf_pool (page_key f page_no) tid perm load_page flush_page
-  in
-  match db_page with
-  | Db_page.DB_BTreePage p -> p
-  | _ -> failwith "internal error"
-;;
+module Make (Ctx : sig
+    val f : t
+    val tid : C.Transaction_id.t
+  end) =
+struct
+  let key_of_tuple t = C.Tuple.attribute t Ctx.f.key_attribute
 
-let get_header_page f tid perm =
-  let p = get_page f 0 tid perm (fun () -> load_header_page f) (flush_page f) in
-  match p with
-  | Btree_page.HeaderPage p -> p
-  | _ -> failwith "internal error"
-;;
-
-let get_node_page f page_no tid perm =
-  let p =
-    get_page f page_no tid perm (fun () -> load_node_page f page_no) (flush_page f)
-  in
-  match p with
-  | Btree_page.NodePage p -> p
-  | _ -> failwith "internal error"
-;;
-
-let get_node_page_read f page_no tid = get_node_page f page_no tid Lock_manager.ReadPerm
-
-let get_leaf_page f page_no tid perm =
-  let p = get_node_page f page_no tid perm in
-  match p with
-  | Btree_page.LeafPage p -> p
-  | _ -> failwith ""
-;;
-
-let get_internal_page f page_no tid perm =
-  let p = get_node_page f page_no tid perm in
-  match p with
-  | Btree_page.InternalPage p -> p
-  | _ -> failwith ""
-;;
-
-let get_root f tid =
-  let p = get_header_page f tid Lock_manager.ReadPerm in
-  Btree_header_page.root p
-;;
-
-let set_root f new_root tid =
-  let p = get_header_page f tid Lock_manager.WritePerm in
-  Btree_header_page.set_root p new_root
-;;
-
-let get_parent f n tid perm =
-  let parent_page_no = Btree_page.parent n in
-  get_internal_page f parent_page_no tid perm
-;;
-
-let get_parent_write f n tid = get_parent f n tid Lock_manager.WritePerm
-let get_leaf_parent f leaf = get_parent f (LeafPage leaf)
-
-let find_leaf f k tid perm =
-  let root = get_root f tid in
-  let rec go n =
-    match get_node_page_read f n tid with
-    | Btree_page.LeafPage _ -> get_leaf_page f n tid perm
-    | Btree_page.InternalPage p -> go (Btree_internal_page.find_child p k)
-  in
-  go root
-;;
-
-let create_leaf_node f parent tuples_info next_leaf_page tid =
-  let page_no = fresh_page_no f in
-  let new_leaf =
-    Btree_leaf_page.create
-      page_no
-      f.schema
-      f.key_field
-      parent
-      (Some tuples_info)
-      next_leaf_page
-  in
-  flush_leaf_page f new_leaf;
-  get_leaf_page f page_no tid Lock_manager.WritePerm
-;;
-
-let create_internal_node f parent create_data tid =
-  let page_no = fresh_page_no f in
-  let new_internal = Btree_internal_page.create page_no f.schema parent create_data in
-  flush_internal_page f new_internal;
-  get_internal_page f page_no tid Lock_manager.WritePerm
-;;
-
-let node_page_no n = Btree_page.page_no (Btree_page.NodePage n)
-let is_root f n tid = node_page_no n = get_root f tid
-let is_leaf_root f leaf = is_root f (Btree_page.LeafPage leaf)
-let is_internal_root f internal = is_root f (Btree_page.InternalPage internal)
-
-let update_parent_pointers f children father tid =
-  List.iter
-    (fun child_page_no ->
-       let child = get_node_page f child_page_no tid Lock_manager.WritePerm in
-       Btree_page.set_parent child father)
-    children
-;;
-
-let rec insert_in_parent f n1 k n2 tid =
-  if is_root f n1 tid
-  then (
-    let children = [ node_page_no n1; n2 ] in
-    let new_root =
-      create_internal_node
-        f
-        None
-        (RootData { child1 = node_page_no n1; key = k; child2 = n2 })
-        tid
+  let get_page page_no perm load_page flush_page =
+    let db_page =
+      Buffer_pool.get_page
+        Ctx.f.buf_pool
+        (page_key Ctx.f page_no)
+        Ctx.tid
+        perm
+        load_page
+        flush_page
     in
-    let new_root_page_no = Btree_node.page_no new_root in
-    update_parent_pointers f children new_root_page_no tid;
-    set_root f new_root_page_no tid)
-  else (
-    let p1 = get_parent_write f n1 tid in
-    match Btree_internal_page.insert_entry p1 k n2 with
-    | Btree_internal_page.Inserted -> ()
-    | Btree_internal_page.Split { sep_key; internal_data } ->
-      Log.log "btree internal split";
-      let p2 =
-        create_internal_node f (Btree_node.parent_opt p1) (InternalData internal_data) tid
-      in
-      update_parent_pointers
-        f
-        (Btree_internal_page.get_children internal_data)
-        (Btree_node.page_no p2)
-        tid;
-      insert_in_parent f (Btree_page.InternalPage p1) sep_key (Btree_node.page_no p2) tid)
-;;
+    match db_page with
+    | Db_page.DB_BTreePage p -> p
+    | _ -> failwith "internal error"
+  ;;
 
-let insert_tuple f t tid =
-  let k = get_key f t in
-  let leaf = find_leaf f k tid Lock_manager.WritePerm in
-  match Btree_leaf_page.insert_tuple leaf t with
-  | Btree_leaf_page.Inserted -> ()
-  | Btree_leaf_page.Split tuples_info ->
-    Log.log "btree leaf split";
+  let get_header_page perm =
+    let p = get_page 0 perm (fun () -> load_header_page Ctx.f) (flush_page Ctx.f) in
+    match p with
+    | Page.HeaderPage p -> p
+    | _ -> failwith "internal error"
+  ;;
+
+  let get_node_page page_no perm =
+    let p =
+      get_page page_no perm (fun () -> load_node_page Ctx.f page_no) (flush_page Ctx.f)
+    in
+    match p with
+    | Page.NodePage p -> p
+    | _ -> failwith "internal error"
+  ;;
+
+  let get_leaf_page page_no perm =
+    let p = get_node_page page_no perm in
+    match p with
+    | Page.LeafPage p -> p
+    | _ -> failwith ""
+  ;;
+
+  let get_internal_page page_no perm =
+    let p = get_node_page page_no perm in
+    match p with
+    | Page.InternalPage p -> p
+    | _ -> failwith ""
+  ;;
+
+  let get_root () =
+    let p = get_header_page Perm.Read in
+    Header.root p
+  ;;
+
+  let set_root new_root =
+    let p = get_header_page Perm.Write in
+    Header.set_root p new_root
+  ;;
+
+  let get_parent n perm =
+    let parent_page_no = Page.parent n in
+    get_internal_page parent_page_no perm
+  ;;
+
+  let get_leaf_parent leaf = get_parent (LeafPage leaf)
+
+  let find_leaf k perm =
+    let root = get_root () in
+    let rec go n =
+      match get_node_page n Perm.Read with
+      | Page.LeafPage _ -> get_leaf_page n perm
+      | Page.InternalPage p -> go (Internal.find_child p k)
+    in
+    go root
+  ;;
+
+  let create_leaf_node parent tuples_info next_leaf_page =
+    let page_no = fresh_page_no Ctx.f in
     let new_leaf =
-      create_leaf_node
-        f
-        (Btree_node.parent_opt leaf)
-        tuples_info
-        (Btree_leaf_page.next_leaf leaf)
-        tid
-    in
-    Btree_leaf_page.set_next_leaf leaf (Some (Btree_node.page_no new_leaf));
-    insert_in_parent
-      f
-      (Btree_page.LeafPage leaf)
-      (Btree_leaf_page.lowest_key new_leaf)
-      (Btree_node.page_no new_leaf)
-      tid
-;;
-
-let get_sibling f n tid =
-  let parent = get_parent f n tid Lock_manager.WritePerm in
-  Btree_internal_page.get_sibling parent (node_page_no n), parent
-;;
-
-type leaf_sibling =
-  { leaf : Btree_leaf_page.t
-  ; sep_key : Value.t
-  ; left : bool
-  }
-
-let get_leaf_sibling f leaf tid =
-  let sibling, parent = get_sibling f (LeafPage leaf) tid in
-  ( { leaf = get_leaf_page f sibling.node tid Lock_manager.WritePerm
-    ; sep_key = sibling.sep_key
-    ; left = sibling.left
-    }
-  , parent )
-;;
-
-type internal_sibling =
-  { internal : Btree_internal_page.t
-  ; sep_key : Value.t
-  ; left : bool
-  }
-
-let get_internal_sibling f internal tid =
-  let sibling, parent = get_sibling f (InternalPage internal) tid in
-  ( { internal = get_internal_page f sibling.node tid Lock_manager.WritePerm
-    ; sep_key = sibling.sep_key
-    ; left = sibling.left
-    }
-  , parent )
-;;
-
-let rec delete_entry f internal k child tid =
-  match
-    Btree_internal_page.delete_entry internal k child (is_internal_root f internal tid)
-  with
-  | Btree_internal_page.Deleted -> ()
-  | Btree_internal_page.EmptyRoot { new_root } ->
-    Log.log "btree empty root";
-    set_root f new_root tid
-  | Btree_internal_page.Underfull ->
-    Log.log "internal underfull";
-    let sibling, parent = get_internal_sibling f internal tid in
-    if Btree_internal_page.can_coalesce internal sibling.internal
-    then (
-      Log.log "internal coalescing";
-      let left, right =
-        if sibling.left then sibling.internal, internal else internal, sibling.internal
-      in
-      let moved_children, new_father =
-        Btree_internal_page.coalesce left sibling.sep_key right
-      in
-      update_parent_pointers f moved_children new_father tid;
-      delete_entry f parent sibling.sep_key (Btree_node.page_no right) tid)
-    else if sibling.left
-    then (
-      Log.log "internal left redistribution";
-      let borrowed_key, borrowed_child =
-        Btree_internal_page.delete_highest_entry sibling.internal
-      in
-      Btree_internal_page.insert_entry_at_beginning
-        internal
-        borrowed_child
-        sibling.sep_key;
-      Btree_internal_page.replace_key parent sibling.sep_key borrowed_key;
-      update_parent_pointers f [ borrowed_child ] (Btree_node.page_no internal) tid)
-    else (
-      Log.log "internal right redistribution";
-      let borrowed_child, borrowed_key =
-        Btree_internal_page.delete_lowest_entry sibling.internal
-      in
-      Btree_internal_page.insert_entry_at_end internal sibling.sep_key borrowed_child;
-      Btree_internal_page.replace_key parent sibling.sep_key borrowed_key;
-      update_parent_pointers f [ borrowed_child ] (Btree_node.page_no internal) tid)
-;;
-
-let delete_tuple f t tid =
-  let k = get_key f t in
-  let leaf = find_leaf f k tid Lock_manager.WritePerm in
-  match Btree_leaf_page.delete_tuple leaf t (is_leaf_root f leaf tid) with
-  | Btree_leaf_page.Deleted -> ()
-  | Btree_leaf_page.Underfull ->
-    Log.log "leaf underfull";
-    let sibling, parent = get_leaf_sibling f leaf tid in
-    if Btree_leaf_page.can_coalesce leaf sibling.leaf
-    then (
-      Log.log "leaf coalescing";
-      let left, right = if sibling.left then sibling.leaf, leaf else leaf, sibling.leaf in
-      Btree_leaf_page.coalesce left right;
-      delete_entry f parent sibling.sep_key (Btree_node.page_no right) tid)
-    else if sibling.left
-    then (
-      Log.log "leaf left redistribution";
-      let borrowed_tuple = Btree_leaf_page.delete_highest_tuple sibling.leaf in
-      Btree_leaf_page.insert_tuple_no_split leaf borrowed_tuple;
-      Btree_internal_page.replace_key parent sibling.sep_key (get_key f borrowed_tuple))
-    else (
-      Log.log "leaf right redistribution";
-      let borrowed_tuple = Btree_leaf_page.delete_lowest_tuple sibling.leaf in
-      Btree_leaf_page.insert_tuple_no_split leaf borrowed_tuple;
-      Btree_internal_page.replace_key
+      Leaf.create
+        page_no
+        Ctx.f.schema
+        Ctx.f.key_attribute
         parent
-        sibling.sep_key
-        (Btree_leaf_page.lowest_key sibling.leaf))
+        (Some tuples_info)
+        next_leaf_page
+    in
+    flush_leaf_page Ctx.f new_leaf;
+    get_leaf_page page_no Perm.Write
+  ;;
+
+  let node_page_no n = Page.page_no (Page.NodePage n)
+  let is_root n = node_page_no n = get_root ()
+  let is_leaf_root leaf = is_root (Page.LeafPage leaf)
+  let is_internal_root internal = is_root (Page.InternalPage internal)
+
+  let update_parent_pointers children parent =
+    List.iter
+      (fun child_page_no ->
+         let child = get_node_page child_page_no Perm.Write in
+         Page.set_parent child parent)
+      children
+  ;;
+
+  let create_internal_node parent create_data =
+    let page_no = fresh_page_no Ctx.f in
+    let new_internal = Internal.create page_no Ctx.f.schema parent create_data in
+    update_parent_pointers (Internal.get_children new_internal) page_no;
+    flush_internal_page Ctx.f new_internal;
+    get_internal_page page_no Perm.Write
+  ;;
+
+  let rec insert_in_parent n1 k n2 =
+    if is_root n1
+    then (
+      let new_root =
+        create_internal_node
+          None
+          (RootData { child1 = node_page_no n1; key = k; child2 = n2 })
+      in
+      set_root (Node.page_no new_root))
+    else (
+      let p1 = get_parent n1 Perm.Write in
+      match Internal.insert_entry p1 k n2 with
+      | Internal.Inserted -> ()
+      | Internal.Split { sep_key; internal_data } ->
+        log "btree internal split";
+        let p2 = create_internal_node (Node.parent_opt p1) (InternalData internal_data) in
+        insert_in_parent (Page.InternalPage p1) sep_key (Node.page_no p2))
+  ;;
+
+  let insert_tuple t =
+    let k = key_of_tuple t in
+    let leaf = find_leaf k Perm.Write in
+    match Leaf.insert_tuple leaf t with
+    | Leaf.Inserted -> ()
+    | Leaf.Split tuples_info ->
+      let new_leaf =
+        create_leaf_node (Node.parent_opt leaf) tuples_info (Leaf.next_leaf leaf)
+      in
+      Leaf.set_next_leaf leaf (Some (Node.page_no new_leaf));
+      insert_in_parent
+        (Page.LeafPage leaf)
+        (Leaf.lowest_key new_leaf)
+        (Node.page_no new_leaf)
+  ;;
+
+  let get_sibling n =
+    let parent = get_parent n Perm.Write in
+    Internal.get_sibling parent (node_page_no n), parent
+  ;;
+
+  type leaf_sibling =
+    { leaf : Leaf.t
+    ; sep_key : C.Value.t
+    ; left : bool
+    }
+
+  let get_leaf_sibling leaf =
+    let sibling, parent = get_sibling (LeafPage leaf) in
+    ( { leaf = get_leaf_page sibling.node Perm.Write
+      ; sep_key = sibling.sep_key
+      ; left = sibling.left
+      }
+    , parent )
+  ;;
+
+  type internal_sibling =
+    { internal : Internal.t
+    ; sep_key : C.Value.t
+    ; left : bool
+    }
+
+  let get_internal_sibling internal =
+    let sibling, parent = get_sibling (InternalPage internal) in
+    ( { internal = get_internal_page sibling.node Perm.Write
+      ; sep_key = sibling.sep_key
+      ; left = sibling.left
+      }
+    , parent )
+  ;;
+
+  let rec delete_entry internal k child =
+    match Internal.delete_entry internal k child (is_internal_root internal) with
+    | Internal.Deleted -> ()
+    | Internal.EmptyRoot { new_root } -> set_root new_root
+    | Internal.Underfull ->
+      let sibling, parent = get_internal_sibling internal in
+      if Internal.can_coalesce internal sibling.internal
+      then (
+        let left, right =
+          if sibling.left then sibling.internal, internal else internal, sibling.internal
+        in
+        let moved_children = Internal.coalesce left sibling.sep_key right in
+        update_parent_pointers moved_children (Node.page_no left);
+        delete_entry parent sibling.sep_key (Node.page_no right))
+      else (
+        let borrowed_key, borrowed_child =
+          if sibling.left
+          then (
+            let borrowed_key, borrowed_child =
+              Internal.delete_highest_entry sibling.internal
+            in
+            Internal.insert_entry_at_beginning internal borrowed_child sibling.sep_key;
+            borrowed_key, borrowed_child)
+          else (
+            let borrowed_child, borrowed_key =
+              Internal.delete_lowest_entry sibling.internal
+            in
+            Internal.insert_entry_at_end internal sibling.sep_key borrowed_child;
+            borrowed_key, borrowed_child)
+        in
+        Internal.replace_key parent sibling.sep_key borrowed_key;
+        update_parent_pointers [ borrowed_child ] (Node.page_no internal))
+  ;;
+
+  let delete_tuple t =
+    let k = key_of_tuple t in
+    let leaf = find_leaf k Perm.Write in
+    match Leaf.delete_tuple leaf t (is_leaf_root leaf) with
+    | Leaf.Deleted -> ()
+    | Leaf.Underfull ->
+      let sibling, parent = get_leaf_sibling leaf in
+      if Leaf.can_coalesce leaf sibling.leaf
+      then (
+        let left, right =
+          if sibling.left then sibling.leaf, leaf else leaf, sibling.leaf
+        in
+        Leaf.coalesce left right;
+        delete_entry parent sibling.sep_key (Node.page_no right))
+      else (
+        let borrowed_tuple, subst_key =
+          if sibling.left
+          then (
+            let borrowed_tuple = Leaf.delete_highest_tuple sibling.leaf in
+            borrowed_tuple, key_of_tuple borrowed_tuple)
+          else (
+            let borrowed_tuple = Leaf.delete_lowest_tuple sibling.leaf in
+            borrowed_tuple, Leaf.lowest_key sibling.leaf)
+        in
+        Leaf.insert_tuple_no_split leaf borrowed_tuple;
+        Internal.replace_key parent sibling.sep_key subst_key)
+  ;;
+
+  let range_scan interval =
+    let leaf = find_leaf (C.Value_interval.left_endpoint interval) Perm.Read in
+    let rec scan_from_leaf leaf =
+      Seq.append
+        (Seq.filter
+           (fun t -> C.Value_interval.satisfies_lower_bound interval (key_of_tuple t))
+           (Leaf.scan_page leaf))
+        (fun () ->
+           match Leaf.next_leaf leaf with
+           | Some next_page_no ->
+             let next_leaf = get_leaf_page next_page_no Perm.Read in
+             scan_from_leaf next_leaf ()
+           | None -> Seq.Nil)
+    in
+    Seq.take_while
+      (fun t -> C.Value_interval.satisfies_upper_bound interval (key_of_tuple t))
+      (scan_from_leaf leaf)
+  ;;
+
+  let scan_file () = range_scan (C.Value_interval.unbounded (key_info Ctx.f).typ)
+end
+
+type btree_ops =
+  { insert_tuple : C.Tuple.t -> unit
+  ; delete_tuple : C.Tuple.t -> unit
+  ; range_scan : C.Value_interval.t -> C.Tuple.t Seq.t
+  ; scan_file : unit -> C.Tuple.t Seq.t
+  }
+
+let make_ops f tid =
+  let module B =
+    Make (struct
+      let f = f
+      let tid = tid
+    end)
+  in
+  { insert_tuple = B.insert_tuple
+  ; delete_tuple = B.delete_tuple
+  ; range_scan = B.range_scan
+  ; scan_file = B.scan_file
+  }
 ;;
 
-let range_scan f interval tid =
-  Log.log "hello from range_scan";
-  let leaf =
-    find_leaf f (Value_interval.left_endpoint interval) tid Lock_manager.ReadPerm
-  in
-  let rec scan_from_leaf leaf =
-    Seq.append
-      (Seq.filter
-         (fun t -> Value_interval.satisfies_lower_bound interval (get_key f t))
-         (Btree_leaf_page.scan_page leaf))
-      (fun () ->
-         match Btree_leaf_page.next_leaf leaf with
-         | Some next_page_no ->
-           let next_leaf = get_leaf_page f next_page_no tid Lock_manager.ReadPerm in
-           scan_from_leaf next_leaf ()
-         | None -> Seq.Nil)
-  in
-  Seq.take_while
-    (fun t -> Value_interval.satisfies_upper_bound interval (get_key f t))
-    (scan_from_leaf leaf)
-;;
-
-let key_info f = List.nth (Table_schema.columns f.schema) f.key_field
-let scan_file f tid = range_scan f (Value_interval.unbounded (key_info f).typ) tid
+let insert_tuple f t tid = (make_ops f tid).insert_tuple t
+let delete_tuple f t tid = (make_ops f tid).delete_tuple t
+let range_scan f interval tid = (make_ops f tid).range_scan interval
+let scan_file f tid = (make_ops f tid).scan_file ()

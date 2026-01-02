@@ -28,10 +28,7 @@ let max_num_keys p = Array.length (keys p) - 1
 let min_num_keys p = max_num_keys p / 2
 let key p i = (keys p).(i)
 let child p i = (children p).(i)
-
-let get_children { children; num_keys; _ } =
-  Array.to_list children |> List.take (num_keys + 1)
-;;
+let get_children p = Array.to_list (children p) |> List.take (num_keys p + 1)
 
 type create_data =
   | RootData of
@@ -208,7 +205,7 @@ let coalesce p1 k p2 =
   Array.blit (keys p2) 0 (keys p1) (num_keys p1 + 1) (num_keys p2);
   Array.blit (children p2) 0 (children p1) (num_children p1) (num_children p2);
   set_num_keys p1 (num_keys p1 + 1 + num_keys p2);
-  get_children p2.data.data, Btree_node.page_no p1
+  get_children p2
 ;;
 
 let delete_entry_at p pos right_child =

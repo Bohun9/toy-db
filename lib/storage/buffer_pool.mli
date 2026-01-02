@@ -8,7 +8,7 @@ val get_page
   :  t
   -> Page_key.t
   -> Core.Transaction_id.t
-  -> Lock_manager.permission
+  -> Perm.t
   -> (unit -> Db_page.t)
   -> (Db_page.t -> unit)
   -> Db_page.t

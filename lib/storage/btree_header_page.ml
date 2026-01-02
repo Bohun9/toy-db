@@ -11,7 +11,7 @@ let set_root (p : t) v =
   Generic_page.set_dirty p
 ;;
 
-let create root = Generic_page.create 0 { root }
+let create page_no root = Generic_page.create page_no { root }
 
 let serialize p =
   let b = Buffer.create Storage_layout.Page_io.page_size in
@@ -19,8 +19,8 @@ let serialize p =
   Buffer.to_bytes b
 ;;
 
-let deserialize data =
+let deserialize page_no data =
   let c = Cursor.create data in
   let root = Cursor.read_int64_le c |> Int64.to_int in
-  create root
+  create page_no root
 ;;

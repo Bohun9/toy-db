@@ -73,12 +73,12 @@ let get_data_page f page_no tid perm =
 ;;
 
 let get_num_data_pages f tid =
-  let h = get_header_page f tid Lock_manager.ReadPerm in
+  let h = get_header_page f tid Perm.Read in
   Heap_header_page.num_data_pages h
 ;;
 
 let set_num_data_pages f v tid =
-  let h = get_header_page f tid Lock_manager.WritePerm in
+  let h = get_header_page f tid Perm.Write in
   Heap_header_page.set_num_data_pages h v
 ;;
 
@@ -89,12 +89,12 @@ let insert_tuple f t tid =
   let target_page_no =
     data_page_numbers num_data_pages
     |> List.find_opt (fun page_no ->
-      let p = get_data_page f page_no tid Lock_manager.ReadPerm in
+      let p = get_data_page f page_no tid Perm.Read in
       Heap_data_page.has_empty_slot p)
   in
   match target_page_no with
   | Some page_no ->
-    let p = get_data_page f page_no tid Lock_manager.WritePerm in
+    let p = get_data_page f page_no tid Perm.Write in
     Heap_data_page.insert_tuple p t
   | None ->
     set_num_data_pages f (num_data_pages + 1) tid;
@@ -105,7 +105,7 @@ let insert_tuple f t tid =
 
 let delete_tuple f rid tid =
   let (C.Record_id.{ page_no; _ } as rid) = Option.get rid in
-  let p = get_data_page f page_no tid Lock_manager.WritePerm in
+  let p = get_data_page f page_no tid Perm.Write in
   Heap_data_page.delete_tuple p rid
 ;;
 
@@ -113,6 +113,6 @@ let scan_file f tid =
   data_page_numbers (get_num_data_pages f tid)
   |> List.to_seq
   |> Seq.flat_map (fun page_no ->
-    let p = get_data_page f page_no tid Lock_manager.ReadPerm in
+    let p = get_data_page f page_no tid Perm.Read in
     Heap_data_page.scan_page p)
 ;;

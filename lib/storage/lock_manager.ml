@@ -4,18 +4,13 @@ module TransactionIdSet = Set.Make (Transaction_id)
 module TransactionIdGraph = Graph.Imperative.Digraph.Concrete (Transaction_id)
 module TransactionIdGraphSCC = Graph.Components.Make (TransactionIdGraph)
 
-type permission =
-  | ReadPerm
-  | WritePerm
-[@@deriving show { with_path = false }]
-
 type page_lock =
   | SharedLock of int
   | ExclusiveLock
 
 let page_lock_of_perm = function
-  | ReadPerm -> SharedLock 1
-  | WritePerm -> ExclusiveLock
+  | Perm.Read -> SharedLock 1
+  | Perm.Write -> ExclusiveLock
 ;;
 
 type t =
@@ -62,17 +57,17 @@ let try_acquire_lock lm page tid perm =
     extend_tran_locks lm tid page;
     true
   | Some ExclusiveLock, _ -> PageKeySet.mem page locked_pages
-  | Some (SharedLock num_trans), ReadPerm ->
+  | Some (SharedLock num_trans), Perm.Read ->
     if not (PageKeySet.mem page locked_pages)
     then (
       Hashtbl.replace lm.page_locks page (SharedLock (num_trans + 1));
       extend_tran_locks lm tid page);
     true
-  | Some (SharedLock num_trans), WritePerm
+  | Some (SharedLock num_trans), Perm.Write
     when num_trans = 1 && PageKeySet.mem page locked_pages ->
     Hashtbl.replace lm.page_locks page ExclusiveLock;
     true
-  | Some (SharedLock num_trans), WritePerm -> false
+  | Some (SharedLock num_trans), Perm.Write -> false
 ;;
 
 let get_blocked_trans lm page =
@@ -124,7 +119,7 @@ let rec acquire_lock lm page tid perm abort_tran =
   Mutex.lock lm.lock_mutex;
   if try_acquire_lock lm page tid perm
   then (
-    Log.log_tid_page tid page "acquired lock with perm %s" (show_permission perm);
+    Log.log_tid_page tid page "acquired lock with perm %s" (Perm.show perm);
     unblock_tran lm page tid;
     Mutex.unlock lm.lock_mutex)
   else (
@@ -134,7 +129,7 @@ let rec acquire_lock lm page tid perm abort_tran =
       abort_tran ();
       Mutex.unlock lm.lock_mutex;
       raise Error.deadlock_victim);
-    Log.log_tid_page tid page "blocked on lock with perm %s" (show_permission perm);
+    Log.log_tid_page tid page "blocked on lock with perm %s" (Perm.show perm);
     Mutex.unlock lm.lock_mutex;
     Unix.sleepf 0.05;
     acquire_lock lm page tid perm abort_tran)
