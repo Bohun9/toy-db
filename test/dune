@@ -11,7 +11,7 @@
 (test
  (name test_btree_file)
  (modules test_btree_file)
- (libraries ounit2 test_utils storage toydb ))
+ (libraries ounit2 test_utils storage toydb))
 
 (test
  (name test_transaction)

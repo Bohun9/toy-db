@@ -2,4 +2,5 @@
  (public_name toydb)
  (name main)
  (libraries toydb)
- (flags (:standard -w -8-26-27-32-37-69)))
+ (flags
+  (:standard -w -8-26-27-32-37-69)))

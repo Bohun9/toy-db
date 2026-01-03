@@ -1,5 +1,6 @@
 (library
  (name core)
- (preprocess (pps ppx_deriving.show))
- (flags (:standard -w -26-27-32-37-69))
- )
+ (preprocess
+  (pps ppx_deriving.show))
+ (flags
+  (:standard -w -26-27-32-37-69)))

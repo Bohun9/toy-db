@@ -21,7 +21,15 @@
  (name toydb)
  (synopsis "A short synopsis")
  (description "A longer description")
- (depends ocaml dune)
+ (depends
+   (ocaml (>= 5.4))
+   dune
+   ocamlgraph
+   domainslib
+   menhir
+   ppx_deriving
+   (ounit2 :with-test)
+   (ocamlformat (and (= 0.28.1) :with-dev-setup)))
  (tags
   (topics "to describe" your project)))
 
