@@ -1,6 +1,8 @@
 module C = Core
 module M = Metadata
 module L = Logical_plan
+module Tuple_desc = Tuple_desc
+module Attribute = Attribute
 
 type grouper_output_item =
   | GrouperAttribute of { group_by_index : int }
@@ -272,7 +274,7 @@ let rec execute_plan' tid pp =
                Aggregate.finalize agg)
           output
       in
-      C.Tuple.{ attributes; rid = None })
+      C.Tuple.create attributes)
   | Sorter { child; order_specifiers } ->
     let order_by_exprs, orders =
       List.split

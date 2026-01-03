@@ -1,4 +1,5 @@
 type db_error =
+  | Lexer_error of char
   | Parser_error of
       { line : int
       ; col : int
@@ -11,6 +12,7 @@ type db_error =
 
 exception DBError of db_error
 
+let lexer_error ch = DBError (Lexer_error ch)
 let parser_error ~line ~col ~tok = DBError (Parser_error { line; col; tok })
 let semantic_error msg = DBError (Semantic_error msg)
 let type_error msg = DBError (Type_error msg)

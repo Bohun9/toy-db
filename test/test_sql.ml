@@ -10,7 +10,7 @@ let with_filled_catalog f =
       Catalog.execute_sql "CREATE TABLE letters (name STRING, quantity INT)" cat tid
       |> ignore;
       Catalog.execute_sql
-        {|INSERT INTO letters VALUES ("A", 1), ("A", 2), ("B", 2), ("C", 3), ("B", 4), ("C", 5)|}
+        {|INSERT INTO letters VALUES ('A', 1), ('A', 2), ('B', 2), ('C', 3), ('B', 4), ('C', 5)|}
         cat
         tid
       |> ignore);
@@ -28,8 +28,8 @@ let test_group_by _ =
           tid
       in
       match result with
-      | Catalog.Rows tuples ->
-        let tuples = List.of_seq tuples in
+      | Catalog.Rows { rows; _ } ->
+        let tuples = List.of_seq rows in
         U.assert_int_eq 3 (List.length tuples);
         U.assert_tuple_eq
           T.{ attributes = [ V.String "A"; V.Int 1; V.Int 2; V.Int 3 ]; rid = None }
@@ -53,8 +53,8 @@ let test_order_by _ =
           tid
       in
       match result with
-      | Catalog.Rows tuples ->
-        let tuples = List.of_seq tuples in
+      | Catalog.Rows { rows; _ } ->
+        let tuples = List.of_seq rows in
         U.assert_int_eq 6 (List.length tuples);
         U.assert_tuple_eq
           T.{ attributes = [ V.String "A"; V.Int 2 ]; rid = None }
@@ -88,8 +88,8 @@ let test_limit _ =
           tid
       in
       match result with
-      | Catalog.Rows tuples ->
-        let tuples = List.of_seq tuples in
+      | Catalog.Rows { rows; _ } ->
+        let tuples = List.of_seq rows in
         U.assert_int_eq 2 (List.length tuples);
         U.assert_tuple_eq
           T.{ attributes = [ V.String "A"; V.Int 1 ]; rid = None }
@@ -111,8 +111,8 @@ let test_subquery _ =
           tid
       in
       match result with
-      | Catalog.Rows tuples ->
-        let tuples = List.of_seq tuples in
+      | Catalog.Rows { rows; _ } ->
+        let tuples = List.of_seq rows in
         U.assert_int_eq 1 (List.length tuples);
         U.assert_tuple_eq
           T.{ attributes = [ V.String "C"; V.Int 5; V.Int 5 ]; rid = None }

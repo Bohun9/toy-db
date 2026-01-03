@@ -55,7 +55,7 @@ let digit = ['0'-'9']
 let int = digit+
 let id = ['a'-'z' 'A'-'Z' '_'] ['a'-'z' 'A'-'Z' '_' '0'-'9']*
 let symbol = ['*' '.' ',' '=' '(' ')'] | "<="
-let string = '"' [^ '"' '\n']* '"'
+let string = ''' [^ ''']* '''
 
 rule token = parse
   | [' ' '\t']             { token lexbuf }
@@ -65,4 +65,4 @@ rule token = parse
   | id as id               { make_id id }
   | symbol as s            { make_symbol s }
   | eof                    { EOF }
-  | _                      { failwith ("unexpected character: " ^ Lexing.lexeme lexbuf) }
+  | _ as c                 { raise @@ Core.Error.lexer_error c }

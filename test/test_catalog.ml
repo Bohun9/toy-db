@@ -12,8 +12,8 @@ let test_persistence _ =
     U.with_catalog dir (fun cat ->
       Catalog.with_tid cat (fun tid ->
         match Catalog.execute_sql "SELECT * FROM numbers" cat tid with
-        | Catalog.Rows tuples ->
-          let tuples = List.of_seq tuples in
+        | Catalog.Rows { rows; _ } ->
+          let tuples = List.of_seq rows in
           U.assert_int_eq 3 (List.length tuples);
           U.assert_tuple_eq (U.make_counter_tuple 0) (List.nth tuples 0);
           U.assert_tuple_eq (U.make_counter_tuple 1) (List.nth tuples 1);

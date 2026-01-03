@@ -101,28 +101,35 @@ let register_metatables cat =
   register_metatable cat columns_metatable_name columns_metatable_schema
 ;;
 
+type rows_info =
+  { desc : Physical_plan.Tuple_desc.t
+  ; rows : C.Tuple.t Seq.t
+  }
+
+type query_result =
+  | Rows of rows_info
+  | NoResult
+
 let execute_sql_stmt reg stmt tid =
-  stmt
-  |> Logical_plan.build_plan reg
-  |> Physical_plan.build_plan reg
-  |> Physical_plan.execute_plan tid
+  let pp = stmt |> Logical_plan.build_plan reg |> Physical_plan.build_plan reg in
+  { desc = pp.desc; rows = Physical_plan.execute_plan tid pp }
 ;;
 
 let execute_meta_query sql cat tid =
   match Sql_parser.parse sql with
   | C.Syntax.SQL_Stmt stmt ->
-    execute_sql_stmt cat.metatable_registry stmt tid |> List.of_seq
+    (execute_sql_stmt cat.metatable_registry stmt tid).rows |> List.of_seq
   | _ -> failwith "internal error"
 ;;
 
-let execute_meta_dml sql cat tid = ignore (execute_meta_query sql cat tid)
+let execute_meta_dml sql cat tid = execute_meta_query sql cat tid |> ignore
 
 let add_table cat name (schema : C.Syntax.table_schema) tid =
   let schema = M.Table_schema.create schema.columns schema.primary_key in
   register_table cat name schema ~clear:true;
   execute_meta_dml
     (Printf.sprintf
-       {|INSERT INTO %s VALUES ("%s", "%s")|}
+       {|INSERT INTO %s VALUES ('%s', '%s')|}
        tables_metatable_name
        name
        (M.Table_schema.primary_key schema |> Option.map fst |> encode_primary_key))
@@ -132,7 +139,7 @@ let add_table cat name (schema : C.Syntax.table_schema) tid =
     (fun off C.Syntax.{ name = cname; typ } ->
        execute_meta_dml
          (Printf.sprintf
-            {|INSERT INTO %s VALUES ("%s", "%s", "%s", %d)|}
+            {|INSERT INTO %s VALUES ('%s', '%s', '%s', %d)|}
             columns_metatable_name
             name
             cname
@@ -153,10 +160,6 @@ let execute_ddl_query cat ddl tid =
   | C.Syntax.CreateTable (name, schema) -> add_table cat name schema tid
   | C.Syntax.DropTable name -> delete_table cat name
 ;;
-
-type query_result =
-  | Rows of C.Tuple.t Seq.t
-  | NoResult
 
 let execute_sql query cat tid =
   match Sql_parser.parse query with

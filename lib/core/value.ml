@@ -6,6 +6,11 @@ type t =
   | String of string
 [@@deriving show]
 
+let show = function
+  | Int n -> string_of_int n
+  | String s -> s
+;;
+
 let compare = compare
 let min = min
 let max = max

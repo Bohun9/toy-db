@@ -1,7 +1,12 @@
 type t
 
+type rows_info =
+  { desc : Physical_plan.Tuple_desc.t
+  ; rows : Core.Tuple.t Seq.t
+  }
+
 type query_result =
-  | Rows of Core.Tuple.t Seq.t
+  | Rows of rows_info
   | NoResult
 
 val create : string -> int -> t
