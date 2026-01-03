@@ -26,7 +26,7 @@ let flush_committed_changes bp tid =
        match Hashtbl.find_opt bp.cache page_key with
        | Some { page; flush } when Db_page.is_dirty page -> flush page
        | _ -> ())
-    (Lock_manager.get_locked_pages_list bp.lock_manager tid)
+    (Lock_manager.locked_pages_list bp.lock_manager tid)
 ;;
 
 let discard_aborted_changes bp tid =
@@ -35,7 +35,7 @@ let discard_aborted_changes bp tid =
        match Hashtbl.find_opt bp.cache page_key with
        | Some { page; _ } when Db_page.is_dirty page -> Hashtbl.remove bp.cache page_key
        | _ -> ())
-    (Lock_manager.get_locked_pages_list bp.lock_manager tid)
+    (Lock_manager.locked_pages_list bp.lock_manager tid)
 ;;
 
 let begin_transaction bp tid = Lock_manager.begin_transaction bp.lock_manager tid
