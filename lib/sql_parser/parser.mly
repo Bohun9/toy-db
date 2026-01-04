@@ -11,16 +11,21 @@ open Syntax
 %token <int> INT_LIT
 %token <string> STRING_LIT
 
-%token SELECT FROM WHERE AND JOIN ON CREATE TABLE INSERT INTO VALUES PRIMARY KEY GROUP BY AS ORDER LIMIT OFFSET
+%token SELECT FROM WHERE AND JOIN ON CREATE TABLE INSERT DELETE INTO VALUES PRIMARY KEY GROUP BY AS ORDER LIMIT OFFSET
 %token COUNT SUM AVG MIN MAX
 %token ASC DESC
 %token INT STRING
 
-%token STAR EQ DOT COMMA LPAREN RPAREN
+%token EQ LE LT GE GT
+%token STAR DOT COMMA LPAREN RPAREN
 %%
 
 relop
   : EQ { Eq }
+  | LE { Le }
+  | LT { Lt }
+  | GE { Ge }
+  | GT { Gt }
 
 field
   : ID        { UnqualifiedField { column = $1 } }
@@ -92,6 +97,7 @@ select_stmt
 stmt
   : select_stmt { Select $1 }
   | INSERT INTO ID VALUES tuples { InsertValues { table = $3; tuples = $5 } }
+  | DELETE FROM ID where_clause { Delete { table = $3; predicates = $4 } }
 
 col_type
   : INT    { Type.Int }

@@ -85,12 +85,23 @@ let test_subquery _ =
       (List.nth tuples 0))
 ;;
 
+let test_delete _ =
+  with_letters_catalog (fun cat tid ->
+    U.execute_dml "DELETE FROM letters WHERE name < 'C'" cat tid;
+    let result = U.execute_stmt "SELECT * FROM letters" cat tid in
+    let tuples = List.of_seq result.rows in
+    U.assert_int_eq 2 (List.length tuples);
+    U.assert_tuple_eq (C.Tuple.create [ V.String "C"; V.Int 3 ]) (List.nth tuples 0);
+    U.assert_tuple_eq (C.Tuple.create [ V.String "C"; V.Int 5 ]) (List.nth tuples 1))
+;;
+
 let suite =
   "sql"
   >::: [ "group_by" >:: test_group_by
        ; "order_by" >:: test_order_by
        ; "limit" >:: test_limit
        ; "subquery" >:: test_subquery
+       ; "delete" >:: test_delete
        ]
 ;;
 

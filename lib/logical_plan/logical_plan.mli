@@ -67,5 +67,10 @@ type t =
       { file : Metadata.Db_file.t
       ; tuples : Core.Syntax.tuple list
       }
+  | Delete of
+      { file : Metadata.Db_file.t
+      ; fields : Table_field.t list
+      ; predicates : predicate list
+      }
 
 val build_plan : Metadata.Table_registry.t -> Core.Syntax.stmt -> t

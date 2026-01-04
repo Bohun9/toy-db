@@ -22,22 +22,22 @@ let test_delete _ =
     Storage.Heap_file.insert_tuple hf (U.make_counter_tuple 1) tid;
     Storage.Heap_file.insert_tuple hf (U.make_counter_tuple 2) tid;
     let tuples = Storage.Heap_file.scan_file hf tid in
-    Seq.iter (fun t -> Storage.Heap_file.delete_tuple hf (C.Tuple.rid t) tid) tuples;
+    Seq.iter (fun t -> Storage.Heap_file.delete_tuple hf t tid) tuples;
     let tuples = Storage.Heap_file.scan_file hf tid in
     U.assert_int_eq 0 (Seq.length tuples))
 ;;
 
 let read_counter hf tid =
   let t = Storage.Heap_file.scan_file hf tid |> List.of_seq |> List.hd in
-  Core.Value.to_int (Core.Tuple.attribute t 0), t.rid
+  Core.Value.to_int (Core.Tuple.attribute t 0), t
 ;;
 
 let rec do_transaction task_id hf bp =
   try
     U.with_tid bp (fun tid ->
       Core.Log.log_tid tid "starting transaction for task %d" task_id;
-      let n, rid = read_counter hf tid in
-      Storage.Heap_file.delete_tuple hf rid tid;
+      let n, t = read_counter hf tid in
+      Storage.Heap_file.delete_tuple hf t tid;
       Storage.Heap_file.insert_tuple hf (U.make_counter_tuple (n + 1)) tid;
       Core.Log.log_tid tid "task %d ended" task_id)
   with

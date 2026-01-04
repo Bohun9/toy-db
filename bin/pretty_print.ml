@@ -2,7 +2,7 @@ open Toydb
 module C = Core
 module M = Metadata
 
-let print_table ~headers ~rows =
+let pretty_print ~headers ~rows =
   let cols = List.length headers in
   let col_widths =
     List.init cols (fun i ->
@@ -42,7 +42,7 @@ let print_rows ({ desc; rows } : Catalog.rows_info) =
     Seq.map (fun tup -> C.Tuple.attributes tup |> List.map C.Value.show) rows
     |> List.of_seq
   in
-  print_table ~headers ~rows:data
+  pretty_print ~headers ~rows:data
 ;;
 
 let print_schema (sch : M.Table_schema.t) =
@@ -51,11 +51,11 @@ let print_schema (sch : M.Table_schema.t) =
     M.Table_schema.columns sch
     |> List.map (fun ({ name; typ } : C.Syntax.column_data) -> [ name; C.Type.show typ ])
   in
-  print_table ~headers ~rows
+  pretty_print ~headers ~rows
 ;;
 
 let print_tables table_names =
   let headers = [ "table" ] in
   let rows = List.map (fun t -> [ t ]) table_names in
-  print_table ~headers ~rows
+  pretty_print ~headers ~rows
 ;;

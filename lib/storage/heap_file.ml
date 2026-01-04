@@ -103,8 +103,8 @@ let insert_tuple f t tid =
     flush_data_page f new_page
 ;;
 
-let delete_tuple f rid tid =
-  let (C.Record_id.{ page_no; _ } as rid) = Option.get rid in
+let delete_tuple f t tid =
+  let (C.Record_id.{ page_no; _ } as rid) = Option.get (C.Tuple.rid t) in
   let p = get_data_page f page_no tid Perm.Write in
   Heap_data_page.delete_tuple p rid
 ;;

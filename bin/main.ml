@@ -8,9 +8,10 @@ let exec_line catalog line =
     let tname = String.sub line 3 (String.length line - 3) |> String.trim in
     Catalog.get_table_schema catalog tname |> Pretty_print.print_schema
   | sql_query ->
-    (match Catalog.with_tid catalog (Catalog.execute_sql sql_query catalog) with
-     | Catalog.Rows rows -> Pretty_print.print_rows rows
-     | Catalog.NoResult -> ())
+    Catalog.with_tid catalog (fun tid ->
+      match Catalog.execute_sql sql_query catalog tid with
+      | Catalog.Rows rows -> Pretty_print.print_rows rows
+      | Catalog.NoResult -> ())
 ;;
 
 let print_error = function

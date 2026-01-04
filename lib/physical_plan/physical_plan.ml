@@ -24,6 +24,10 @@ type physical_plan_data =
       { child : t
       ; file : M.Db_file.table_file
       }
+  | Delete of
+      { child : t
+      ; file : M.Db_file.table_file
+      }
   | Project of
       { child : t
       ; exprs : Expr.t list
@@ -84,30 +88,32 @@ let index_interval_from_predicates predicates key_type =
     predicates
 ;;
 
+let build_plan_table file fields predicates =
+  match file with
+  | M.Db_file.TableFile file ->
+    let pp = make_pp (Tuple_desc.from_table_fields fields) @@ SeqScan { file } in
+    build_plan_predicates pp predicates
+  | M.Db_file.IndexFile file ->
+    let (M.Db_file.PackedIndex (m, f)) = file in
+    let module M = (val m) in
+    let index_key = M.key_info f in
+    let index_predicates, other_predicates =
+      List.partition
+        (fun ({ field; _ } : L.predicate) -> index_key.name = field.column)
+        predicates
+    in
+    let index_interval = index_interval_from_predicates index_predicates index_key.typ in
+    let pp =
+      make_pp (Tuple_desc.from_table_fields fields)
+      @@ RangeScan { file; interval = index_interval }
+    in
+    build_plan_predicates pp other_predicates
+;;
+
 let rec build_plan_table_expr reg grouped_predicates = function
   | L.Table { file; alias; fields } ->
     let predicates = Hashtbl.find grouped_predicates alias in
-    (match file with
-     | M.Db_file.TableFile file ->
-       let pp = make_pp (Tuple_desc.from_table_fields fields) @@ SeqScan { file } in
-       build_plan_predicates pp predicates
-     | M.Db_file.IndexFile file ->
-       let (M.Db_file.PackedIndex (m, f)) = file in
-       let module M = (val m) in
-       let index_key = M.key_info f in
-       let index_predicates, other_predicates =
-         List.partition
-           (fun ({ field; _ } : L.predicate) -> index_key.name = field.column)
-           predicates
-       in
-       let index_interval =
-         index_interval_from_predicates index_predicates index_key.typ
-       in
-       let pp =
-         make_pp (Tuple_desc.from_table_fields fields)
-         @@ RangeScan { file; interval = index_interval }
-       in
-       build_plan_predicates pp other_predicates)
+    build_plan_table file fields predicates
   | L.Subquery { select; fields } ->
     let pp = build_plan reg (L.Select select) in
     { pp with desc = Tuple_desc.from_table_fields fields }
@@ -194,6 +200,9 @@ and build_plan reg logical_plan =
                (Const { tuples = List.map C.Tuple.trans_tuple tuples })
          ; file = M.Db_file.to_table_file file
          })
+  | L.Delete { file; fields; predicates } ->
+    let child = build_plan_table file fields predicates in
+    make_pp child.desc @@ Delete { child; file = M.Db_file.to_table_file file }
 ;;
 
 let eval_exprs es t = List.map (fun e -> Expr.eval e t) es
@@ -210,6 +219,10 @@ let rec execute_plan' tid pp =
   | Insert { child; file = M.Db_file.PackedTable (m, f) } ->
     let module M = (val m) in
     Seq.iter (fun t -> M.insert_tuple f t tid) (execute_plan tid child);
+    Seq.empty
+  | Delete { child; file = M.Db_file.PackedTable (m, f) } ->
+    let module M = (val m) in
+    execute_plan tid child |> List.of_seq |> List.iter (fun t -> M.delete_tuple f t tid);
     Seq.empty
   | Project { child; exprs } ->
     Seq.map

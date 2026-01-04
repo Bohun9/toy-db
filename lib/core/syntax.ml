@@ -94,6 +94,10 @@ type stmt =
       { table : string
       ; tuples : tuple list
       }
+  | Delete of
+      { table : string
+      ; predicates : predicate list
+      }
 
 type column_data =
   { name : string

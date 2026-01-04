@@ -30,11 +30,16 @@ let kw_map = [
   "DESC", DESC;
   "LIMIT", LIMIT;
   "OFFSET", OFFSET;
+  "DELETE", DELETE;
 ] |> List.to_seq |> Hashtbl.of_seq
 
 let symbols_map = [
   "*", STAR;
   "=", EQ;
+  "<=", LE;
+  "<", LT;
+  ">=", GE;
+  ">", GT;
   ".", DOT;
   ",", COMMA;
   "(", LPAREN;
@@ -54,7 +59,7 @@ let make_symbol s =
 let digit = ['0'-'9']
 let int = digit+
 let id = ['a'-'z' 'A'-'Z' '_'] ['a'-'z' 'A'-'Z' '_' '0'-'9']*
-let symbol = ['*' '.' ',' '=' '(' ')'] | "<="
+let symbol = ['*' '.' ',' '=' '<' '>' '(' ')'] | "<=" | ">="
 let string = ''' [^ ''']* '''
 
 rule token = parse

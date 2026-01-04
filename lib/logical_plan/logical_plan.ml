@@ -69,6 +69,11 @@ type t =
       { file : M.Db_file.t
       ; tuples : C.Syntax.tuple list
       }
+  | Delete of
+      { file : M.Db_file.t
+      ; fields : Table_field.t list
+      ; predicates : predicate list
+      }
 
 let agg_result_type agg_kind input_type =
   match agg_kind with
@@ -93,6 +98,12 @@ let get_table_with_schema reg name =
   let file = M.Table_registry.get_table reg name in
   let sch = M.Db_file.schema file in
   file, sch
+;;
+
+let check_predicate tab_env ({ field = field_name; op; value } : C.Syntax.predicate) =
+  let field = Table_env.resolve_field tab_env field_name in
+  require_same_type field.typ (C.Syntax.derive_value_type value);
+  { field; op; value }
 ;;
 
 let rec check_table_expr reg = function
@@ -127,15 +138,13 @@ and build_plan_select
   List.iter
     (fun alias -> Hashtbl.add grouped_predicates alias [])
     (Table_env.aliases table_env);
-  List.iter
-    (fun ({ field = field_name; op; value } : C.Syntax.predicate) ->
-       let field = Table_env.resolve_field table_env field_name in
-       require_same_type field.typ (C.Syntax.derive_value_type value);
-       Hashtbl.replace
-         grouped_predicates
-         field.table_alias
-         ({ field; op; value } :: Hashtbl.find grouped_predicates field.table_alias))
-    predicates;
+  predicates
+  |> List.map (check_predicate table_env)
+  |> List.iter (fun (pred : predicate) ->
+    Hashtbl.replace
+      grouped_predicates
+      pred.field.table_alias
+      (pred :: Hashtbl.find grouped_predicates pred.field.table_alias));
   let grouping, select_list_fields =
     match group_by with
     | None ->
@@ -227,4 +236,9 @@ let build_plan reg = function
     if List.for_all (M.Table_schema.typecheck sch) tuple_types
     then InsertValues { file; tuples }
     else raise Error.type_mismatch
+  | C.Syntax.Delete { table; predicates } ->
+    let file, sch = get_table_with_schema reg table in
+    let fields = Table_field.schema_to_fields table sch in
+    let env = Table_env.extend Table_env.empty table fields in
+    Delete { file; fields; predicates = List.map (check_predicate env) predicates }
 ;;

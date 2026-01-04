@@ -4,9 +4,10 @@ module type TABLE_FILE = sig
   type t
 
   val file_path : t -> string
-  val insert_tuple : t -> C.Tuple.t -> C.Transaction_id.t -> unit
-  val scan_file : t -> C.Transaction_id.t -> C.Tuple.t Seq.t
   val schema : t -> Table_schema.t
+  val insert_tuple : t -> C.Tuple.t -> C.Transaction_id.t -> unit
+  val delete_tuple : t -> C.Tuple.t -> C.Transaction_id.t -> unit
+  val scan_file : t -> C.Transaction_id.t -> C.Tuple.t Seq.t
 end
 
 module type INDEX_FILE = sig
