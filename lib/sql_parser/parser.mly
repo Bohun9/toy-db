@@ -47,20 +47,23 @@ order
   : ASC  { Asc }
   | DESC { Desc }
 
+alias
+  : AS ID { $2 }
+
 order_item
   : field order? { { field = $1; order = $2 } }
 
 select_item
-  : field                               { SelectField { field = $1 } }
-  | aggregate LPAREN field RPAREN AS ID { SelectAggregate { agg_kind = $1; field = $3; name = $6 } }
+  : field                                { SelectField { field = $1 } }
+  | aggregate LPAREN field RPAREN alias? { SelectAggregate { agg_kind = $1; field = $3; name = $5 } }
 
 select_list
   : STAR                               { Star }
   | separated_list(COMMA, select_item) { SelectList $1 }
 
 table_expr 
-  : ID                                           { Table { name = $1; alias = None } }
-  | LPAREN select_stmt RPAREN AS ID              { Subquery { select = $2; alias = $5 } }
+  : ID alias?                                    { Table { name = $1; alias = $2 } }
+  | LPAREN select_stmt RPAREN alias?             { Subquery { select = $2; alias = $4 } }
   | table_expr JOIN table_expr ON field EQ field { Join { tab1 = $1; tab2 = $3; field1 = $5; field2 = $7 } }
 
 predicate

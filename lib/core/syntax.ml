@@ -38,7 +38,7 @@ type select_item =
   | SelectAggregate of
       { agg_kind : aggregate_kind
       ; field : field_name
-      ; name : string
+      ; name : string option
       }
 
 type select_list =
@@ -69,7 +69,7 @@ type table_expr =
       }
   | Subquery of
       { select : select_stmt
-      ; alias : string
+      ; alias : string option
       }
   | Join of
       { tab1 : table_expr

@@ -19,8 +19,8 @@ let test_group_by _ =
   with_letters_catalog (fun cat tid ->
     let result =
       U.execute_stmt
-        "SELECT name, MIN(quantity) AS min, MAX(quantity) AS max, SUM(quantity) AS sum \
-         FROM letters GROUP BY name"
+        "SELECT name, MIN(quantity) AS min, MAX(quantity) AS max, SUM(quantity) FROM \
+         letters GROUP BY name"
         cat
         tid
     in
@@ -73,8 +73,8 @@ let test_subquery _ =
   with_letters_catalog (fun cat tid ->
     let result =
       U.execute_stmt
-        "SELECT * FROM letters JOIN (SELECT MAX(quantity) AS max FROM letters GROUP BY) \
-         AS dummy ON quantity = max"
+        "SELECT * FROM letters JOIN (SELECT MAX(quantity) FROM letters GROUP BY) ON \
+         quantity = max"
         cat
         tid
     in

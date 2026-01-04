@@ -79,6 +79,14 @@ let agg_result_type agg_kind input_type =
   | C.Syntax.Max -> input_type
 ;;
 
+let agg_default_name = function
+  | C.Syntax.Count -> "count"
+  | C.Syntax.Sum -> "sum"
+  | C.Syntax.Avg -> "avg"
+  | C.Syntax.Min -> "min"
+  | C.Syntax.Max -> "max"
+;;
+
 let require_same_type t1 t2 = if t1 <> t2 then raise Error.type_mismatch
 
 let get_table_with_schema reg name =
@@ -94,6 +102,11 @@ let rec check_table_expr reg = function
     let fields = Table_field.schema_to_fields alias sch in
     Table { file; alias; fields }, Table_env.extend Table_env.empty alias fields
   | C.Syntax.Subquery { select; alias } ->
+    let alias =
+      match alias with
+      | Some alias -> alias
+      | None -> Fresh_alias.gen ()
+    in
     let select, select_list_fields = build_plan_select reg select in
     let fields = List.map (Table_field.of_field_with_alias alias) select_list_fields in
     Subquery { select; fields }, Table_env.extend Table_env.empty alias fields
@@ -164,6 +177,7 @@ and build_plan_select
                  SelectField { field; group_by_index }
                | C.Syntax.SelectAggregate { agg_kind; field = field_name; name } ->
                  let field = Table_env.resolve_field table_env field_name in
+                 let name = Option.value name ~default:(agg_default_name agg_kind) in
                  SelectAggregate
                    { agg_kind
                    ; field
