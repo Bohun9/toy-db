@@ -82,3 +82,10 @@ let get_page bp k tid perm load flush =
       Hashtbl.add bp.cache k { page; flush };
       page)
 ;;
+
+let discard_file_pages bp file =
+  Mutex.protect bp.cache_mutex (fun () ->
+    Hashtbl.filter_map_inplace
+      (fun (page_key : Page_key.t) p -> if file = page_key.file then None else Some p)
+      bp.cache)
+;;

@@ -11,7 +11,7 @@ open Syntax
 %token <int> INT_LIT
 %token <string> STRING_LIT
 
-%token SELECT FROM WHERE AND JOIN ON CREATE TABLE INSERT DELETE INTO VALUES PRIMARY KEY GROUP BY AS ORDER LIMIT OFFSET
+%token SELECT FROM WHERE AND JOIN ON CREATE DROP TABLE INSERT DELETE INTO VALUES PRIMARY KEY GROUP BY AS ORDER LIMIT OFFSET
 %token COUNT SUM AVG MIN MAX
 %token ASC DESC
 %token INT STRING
@@ -115,6 +115,7 @@ table_schema
 
 ddl
   : CREATE TABLE ID LPAREN table_schema RPAREN { CreateTable($3, $5) }
+  | DROP TABLE ID                              { DropTable $3 }
 
 sql
   : stmt EOF { SQL_Stmt $1 }

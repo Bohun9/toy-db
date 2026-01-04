@@ -150,15 +150,24 @@ let add_table cat name (schema : C.Syntax.table_schema) tid =
     (M.Table_schema.columns schema)
 ;;
 
-let delete_table cat name =
+let delete_table cat name tid =
   M.Table_registry.delete_table cat.table_registry name;
-  remove_if_exists (table_path cat name)
+  S.Buffer_pool.discard_file_pages cat.buf_pool (table_path cat name);
+  remove_if_exists (table_path cat name);
+  execute_meta_dml
+    (Printf.sprintf "DELETE FROM %s WHERE name = '%s'" tables_metatable_name name)
+    cat
+    tid;
+  execute_meta_dml
+    (Printf.sprintf "DELETE FROM %s WHERE table = '%s'" columns_metatable_name name)
+    cat
+    tid
 ;;
 
 let execute_ddl_query cat ddl tid =
   match ddl with
   | C.Syntax.CreateTable (name, schema) -> add_table cat name schema tid
-  | C.Syntax.DropTable name -> delete_table cat name
+  | C.Syntax.DropTable name -> delete_table cat name tid
 ;;
 
 let execute_sql query cat tid =

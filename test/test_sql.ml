@@ -2,6 +2,7 @@ open OUnit2
 open Toydb
 module U = Test_utils
 module C = Core
+module M = Metadata
 module V = C.Value
 
 let with_letters_catalog f =
@@ -95,6 +96,13 @@ let test_delete _ =
     U.assert_tuple_eq (C.Tuple.create [ V.String "C"; V.Int 5 ]) (List.nth tuples 1))
 ;;
 
+let test_drop _ =
+  with_letters_catalog (fun cat tid ->
+    U.execute_ddl "DROP TABLE letters" cat tid;
+    assert_raises M.Error.table_not_found (fun () ->
+      U.execute_stmt "SELECT * FROM letters" cat tid))
+;;
+
 let suite =
   "sql"
   >::: [ "group_by" >:: test_group_by
@@ -102,6 +110,7 @@ let suite =
        ; "limit" >:: test_limit
        ; "subquery" >:: test_subquery
        ; "delete" >:: test_delete
+       ; "drop" >:: test_drop
        ]
 ;;
 

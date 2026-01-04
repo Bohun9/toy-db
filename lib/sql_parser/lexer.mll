@@ -9,6 +9,7 @@ let kw_map = [
   "JOIN", JOIN;
   "ON", ON;
   "CREATE", CREATE;
+  "DROP", DROP;
   "TABLE", TABLE;
   "INT", INT;
   "STRING", STRING;

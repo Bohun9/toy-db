@@ -12,3 +12,5 @@ val get_page
   -> (unit -> Db_page.t)
   -> (Db_page.t -> unit)
   -> Db_page.t
+
+val discard_file_pages : t -> string -> unit
