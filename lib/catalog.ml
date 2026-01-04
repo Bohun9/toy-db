@@ -172,7 +172,7 @@ let execute_sql query cat tid =
 let load_tables_metatable cat =
   with_tid cat (fun tid ->
     execute_meta_query (Printf.sprintf "SELECT * FROM %s" tables_metatable_name) cat tid
-    |> List.map (fun (t : C.Tuple.t) ->
+    |> List.map (fun t ->
       ( C.Tuple.attribute t 0 |> C.Value.to_string
       , C.Tuple.attribute t 1 |> C.Value.to_string |> decode_primary_key )))
 ;;
@@ -183,7 +183,7 @@ let load_columns_metatable cat =
       (Printf.sprintf "SELECT * FROM %s ORDER BY offset ASC" columns_metatable_name)
       cat
       tid
-    |> List.map (fun (t : C.Tuple.t) ->
+    |> List.map (fun t ->
       ( C.Tuple.attribute t 0 |> C.Value.to_string
       , C.Tuple.attribute t 1 |> C.Value.to_string
       , C.Tuple.attribute t 2 |> C.Value.to_string |> decode_type )))

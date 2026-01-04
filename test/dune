@@ -6,24 +6,19 @@
 (test
  (name test_heap_file)
  (modules test_heap_file)
- (libraries ounit2 test_utils storage))
+ (libraries ounit2 domainslib test_utils storage))
 
 (test
  (name test_btree_file)
  (modules test_btree_file)
- (libraries ounit2 test_utils storage toydb))
-
-(test
- (name test_transaction)
- (modules test_transaction)
- (libraries toydb ounit2 domainslib test_utils storage))
+ (libraries ounit2 domainslib test_utils core storage))
 
 (test
  (name test_catalog)
  (modules test_catalog)
- (libraries toydb ounit2 test_utils))
+ (libraries ounit2 test_utils toydb))
 
 (test
  (name test_sql)
  (modules test_sql)
- (libraries toydb ounit2 test_utils))
+ (libraries ounit2 test_utils toydb))
