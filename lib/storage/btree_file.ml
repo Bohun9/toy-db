@@ -4,7 +4,6 @@ module Page = Btree_page
 module Header = Btree_header_page
 module Internal = Btree_internal_page
 module Leaf = Btree_leaf_page
-module Node = Btree_node
 
 let log = C.Log.log
 
@@ -42,7 +41,7 @@ let initialize f key_attribute =
   assert (header_page_no = 0);
   assert (root_page_no = 1);
   let header = Header.create header_page_no root_page_no in
-  let root = Leaf.create root_page_no f.schema key_attribute None None None in
+  let root = Leaf.create root_page_no f.schema key_attribute None None in
   flush_header_page f header;
   flush_leaf_page f root
 ;;
@@ -128,31 +127,23 @@ struct
     Header.set_root p new_root
   ;;
 
-  let get_parent n perm =
-    let parent_page_no = Page.parent n in
-    get_internal_page parent_page_no perm
-  ;;
-
-  let get_leaf_parent leaf = get_parent (LeafPage leaf)
-
   let find_leaf k perm =
     let root = get_root () in
-    let rec go n =
+    let rec go n path =
       match get_node_page n Perm.Read with
-      | Page.LeafPage _ -> get_leaf_page n perm
-      | Page.InternalPage p -> go (Internal.find_child p k)
+      | Page.LeafPage _ -> get_leaf_page n perm, path
+      | Page.InternalPage p -> go (Internal.find_child p k) (p :: path)
     in
-    go root
+    go root []
   ;;
 
-  let create_leaf_node parent tuples_info next_leaf_page =
+  let create_leaf_node tuples_info next_leaf_page =
     let page_no = fresh_page_no Ctx.f in
     let new_leaf =
       Leaf.create
         page_no
         Ctx.f.schema
         Ctx.f.key_attribute
-        parent
         (Some tuples_info)
         next_leaf_page
     in
@@ -165,61 +156,47 @@ struct
   let is_leaf_root leaf = is_root (Page.LeafPage leaf)
   let is_internal_root internal = is_root (Page.InternalPage internal)
 
-  let update_parent_pointers children parent =
-    List.iter
-      (fun child_page_no ->
-         let child = get_node_page child_page_no Perm.Write in
-         Page.set_parent child parent)
-      children
-  ;;
-
-  let create_internal_node parent create_data =
+  let create_internal_node create_data =
     let page_no = fresh_page_no Ctx.f in
-    let new_internal = Internal.create page_no (key_info Ctx.f).typ parent create_data in
-    update_parent_pointers (Internal.get_children new_internal) page_no;
+    let new_internal = Internal.create page_no (key_info Ctx.f).typ create_data in
     flush_internal_page Ctx.f new_internal;
     get_internal_page page_no Perm.Write
   ;;
 
-  let rec insert_in_parent n1 k n2 =
+  let rec insert_in_parent n1 k n2 path =
     if is_root n1
     then (
       let new_root =
         create_internal_node
-          None
-          (RootData { child1 = node_page_no n1; key = k; child2 = n2 })
+          (Internal.RootData { child1 = node_page_no n1; key = k; child2 = n2 })
       in
-      set_root (Node.page_no new_root))
+      set_root (Generic_page.page_no new_root))
     else (
-      let p1 = get_parent n1 Perm.Write in
+      let p1, path = List.hd path, List.tl path in
       match Internal.insert_entry p1 k n2 with
       | Internal.Inserted -> ()
       | Internal.Split { sep_key; internal_data } ->
         log "btree internal split";
-        let p2 = create_internal_node (Node.parent_opt p1) (InternalData internal_data) in
-        insert_in_parent (Page.InternalPage p1) sep_key (Node.page_no p2))
+        let p2 = create_internal_node (InternalData internal_data) in
+        insert_in_parent (Page.InternalPage p1) sep_key (Generic_page.page_no p2) path)
   ;;
 
   let insert_tuple t =
     let k = key_of_tuple t in
-    let leaf = find_leaf k Perm.Write in
+    let leaf, path = find_leaf k Perm.Write in
     match Leaf.insert_tuple leaf t with
     | Leaf.Inserted -> ()
     | Leaf.Split tuples_info ->
-      let new_leaf =
-        create_leaf_node (Node.parent_opt leaf) tuples_info (Leaf.next_leaf leaf)
-      in
-      Leaf.set_next_leaf leaf (Some (Node.page_no new_leaf));
+      let new_leaf = create_leaf_node tuples_info (Leaf.next_leaf leaf) in
+      Leaf.set_next_leaf leaf (Some (Generic_page.page_no new_leaf));
       insert_in_parent
         (Page.LeafPage leaf)
         (Leaf.lowest_key new_leaf)
-        (Node.page_no new_leaf)
+        (Generic_page.page_no new_leaf)
+        path
   ;;
 
-  let get_sibling n =
-    let parent = get_parent n Perm.Write in
-    Internal.get_sibling parent (node_page_no n), parent
-  ;;
+  let get_sibling parent n = Internal.get_sibling parent (node_page_no n)
 
   type leaf_sibling =
     { leaf : Leaf.t
@@ -227,13 +204,12 @@ struct
     ; left : bool
     }
 
-  let get_leaf_sibling leaf =
-    let sibling, parent = get_sibling (LeafPage leaf) in
-    ( { leaf = get_leaf_page sibling.node Perm.Write
-      ; sep_key = sibling.sep_key
-      ; left = sibling.left
-      }
-    , parent )
+  let get_leaf_sibling leaf parent =
+    let sibling = get_sibling parent (LeafPage leaf) in
+    { leaf = get_leaf_page sibling.node Perm.Write
+    ; sep_key = sibling.sep_key
+    ; left = sibling.left
+    }
   ;;
 
   type internal_sibling =
@@ -242,63 +218,62 @@ struct
     ; left : bool
     }
 
-  let get_internal_sibling internal =
-    let sibling, parent = get_sibling (InternalPage internal) in
-    ( { internal = get_internal_page sibling.node Perm.Write
-      ; sep_key = sibling.sep_key
-      ; left = sibling.left
-      }
-    , parent )
+  let get_internal_sibling internal parent =
+    let sibling = get_sibling parent (InternalPage internal) in
+    { internal = get_internal_page sibling.node Perm.Write
+    ; sep_key = sibling.sep_key
+    ; left = sibling.left
+    }
   ;;
 
-  let rec delete_entry internal k child =
+  let rec delete_entry internal k child path =
     match Internal.delete_entry internal k child (is_internal_root internal) with
     | Internal.Deleted -> ()
     | Internal.EmptyRoot { new_root } -> set_root new_root
     | Internal.Underfull ->
-      let sibling, parent = get_internal_sibling internal in
+      let parent, path = List.hd path, List.tl path in
+      let sibling = get_internal_sibling internal parent in
       if Internal.can_coalesce internal sibling.internal
       then (
         let left, right =
           if sibling.left then sibling.internal, internal else internal, sibling.internal
         in
         let moved_children = Internal.coalesce left sibling.sep_key right in
-        update_parent_pointers moved_children (Node.page_no left);
-        delete_entry parent sibling.sep_key (Node.page_no right))
+        delete_entry parent sibling.sep_key (Generic_page.page_no right) path)
       else (
-        let borrowed_key, borrowed_child =
+        let borrowed_key =
           if sibling.left
           then (
             let borrowed_key, borrowed_child =
               Internal.delete_highest_entry sibling.internal
             in
             Internal.insert_entry_at_beginning internal borrowed_child sibling.sep_key;
-            borrowed_key, borrowed_child)
+            borrowed_key)
           else (
             let borrowed_child, borrowed_key =
               Internal.delete_lowest_entry sibling.internal
             in
             Internal.insert_entry_at_end internal sibling.sep_key borrowed_child;
-            borrowed_key, borrowed_child)
+            borrowed_key)
         in
-        Internal.replace_key parent sibling.sep_key borrowed_key;
-        update_parent_pointers [ borrowed_child ] (Node.page_no internal))
+        Internal.replace_key parent sibling.sep_key borrowed_key)
   ;;
 
   let delete_tuple t =
     let k = key_of_tuple t in
-    let leaf = find_leaf k Perm.Write in
+    let leaf, path = find_leaf k Perm.Write in
     match Leaf.delete_tuple leaf t (is_leaf_root leaf) with
     | Leaf.Deleted -> ()
     | Leaf.Underfull ->
-      let sibling, parent = get_leaf_sibling leaf in
+      let parent, path = List.hd path, List.tl path in
+      let sibling = get_leaf_sibling leaf parent in
       if Leaf.can_coalesce leaf sibling.leaf
       then (
         let left, right =
           if sibling.left then sibling.leaf, leaf else leaf, sibling.leaf
         in
         Leaf.coalesce left right;
-        delete_entry parent sibling.sep_key (Node.page_no right))
+        delete_entry parent sibling.sep_key (Generic_page.page_no right) path)
       else (
         let borrowed_tuple, subst_key =
           if sibling.left
@@ -314,7 +289,7 @@ struct
   ;;
 
   let range_scan interval =
-    let leaf = find_leaf (C.Value_interval.left_endpoint interval) Perm.Read in
+    let leaf, _ = find_leaf (C.Value_interval.left_endpoint interval) Perm.Read in
     let rec scan_from_leaf leaf =
       Seq.append
         (Seq.filter

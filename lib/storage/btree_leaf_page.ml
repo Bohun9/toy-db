@@ -9,21 +9,21 @@ type leaf_data =
   ; mutable next_leaf : int option
   }
 
-type t = leaf_data Generic_page.t Btree_node.t
+type t = leaf_data Generic_page.t
 
-let key_attribute (p : t) = p.data.data.key_attribute
-let tuples (p : t) = p.data.data.tuples
-let num_tuples (p : t) = p.data.data.num_tuples
-let next_leaf (p : t) = p.data.data.next_leaf
+let key_attribute (p : t) = p.data.key_attribute
+let tuples (p : t) = p.data.tuples
+let num_tuples (p : t) = p.data.num_tuples
+let next_leaf (p : t) = p.data.next_leaf
 
 let set_next_leaf (p : t) v =
-  p.data.data.next_leaf <- v;
-  Btree_node.set_dirty p
+  p.data.next_leaf <- v;
+  Generic_page.set_dirty p
 ;;
 
 let set_num_tuples (p : t) v =
-  p.data.data.num_tuples <- v;
-  Btree_node.set_dirty p
+  p.data.num_tuples <- v;
+  Generic_page.set_dirty p
 ;;
 
 let max_num_tuples p = Array.length (tuples p) - 1
@@ -46,14 +46,13 @@ type tuples_info =
   ; num_tuples : int
   }
 
-let create page_no sch key_attribute parent tuples_info next_leaf =
+let create page_no sch key_attribute tuples_info next_leaf =
   let tuples, num_tuples =
     match tuples_info with
     | Some { tuples; num_tuples } -> tuples, num_tuples
     | None -> create_storage sch, 0
   in
-  Btree_node.create parent
-  @@ Generic_page.create page_no { key_attribute; tuples; num_tuples; next_leaf }
+  Generic_page.create page_no { key_attribute; tuples; num_tuples; next_leaf }
 ;;
 
 let encode_next_leaf p = Option.value (next_leaf p) ~default:0
@@ -67,9 +66,6 @@ let decode_next_leaf p =
 let serialize p =
   let b = Buffer.create Storage_layout.Page_io.page_size in
   Buffer.add_char b leaf_id;
-  Buffer.add_int64_le
-    b
-    (Btree_node.parent_opt p |> Btree_node.encode_parent |> Int64.of_int);
   Buffer.add_int64_le b (encode_next_leaf p |> Int64.of_int);
   Buffer.add_int16_le b (num_tuples p);
   for i = 0 to num_tuples p - 1 do
@@ -81,14 +77,13 @@ let serialize p =
 let deserialize page_no sch key_attribute data =
   let c = Cursor.create data in
   assert (Cursor.read_char c = leaf_id);
-  let parent = Cursor.read_int64_le c |> Int64.to_int |> Btree_node.decode_parent in
   let next_leaf = Cursor.read_int64_le c |> Int64.to_int |> decode_next_leaf in
   let num_tuples = Cursor.read_int16_le c in
   let tuples = create_storage sch in
   for i = 0 to num_tuples - 1 do
     tuples.(i) <- Storage_layout.Codec.deserialize_tuple c sch page_no i
   done;
-  create page_no sch key_attribute parent (Some { tuples; num_tuples }) next_leaf
+  create page_no sch key_attribute (Some { tuples; num_tuples }) next_leaf
 ;;
 
 type insert_result =

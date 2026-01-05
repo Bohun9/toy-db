@@ -12,15 +12,15 @@ type internal_data =
   ; mutable num_keys : int
   }
 
-type t = internal_data Generic_page.t Btree_node.t
+type t = internal_data Generic_page.t
 
-let keys (p : t) = p.data.data.keys
-let children (p : t) = p.data.data.children
-let num_keys (p : t) = p.data.data.num_keys
+let keys (p : t) = p.data.keys
+let children (p : t) = p.data.children
+let num_keys (p : t) = p.data.num_keys
 
 let set_num_keys (p : t) v =
-  p.data.data.num_keys <- v;
-  Btree_node.set_dirty p
+  p.data.num_keys <- v;
+  Generic_page.set_dirty p
 ;;
 
 let num_children p = num_keys p + 1
@@ -50,7 +50,7 @@ let create_storage key_type =
   keys, children
 ;;
 
-let create page_no key_type parent create_data =
+let create page_no key_type create_data =
   let data =
     match create_data with
     | RootData { child1; key; child2 } ->
@@ -61,7 +61,7 @@ let create page_no key_type parent create_data =
       { keys; children; num_keys = 1 }
     | InternalData data -> data
   in
-  Btree_node.create parent @@ Generic_page.create page_no data
+  Generic_page.create page_no data
 ;;
 
 (* [predicate] should be monotonic. *)
@@ -76,9 +76,6 @@ let find_child p k = child p (find_first_key p (C.Value.eval_lt k))
 let serialize p =
   let b = Buffer.create Storage_layout.Page_io.page_size in
   Buffer.add_char b internal_id;
-  Buffer.add_int64_le
-    b
-    (Btree_node.parent_opt p |> Btree_node.encode_parent |> Int64.of_int);
   Buffer.add_int16_le b (num_keys p);
   for i = 0 to num_keys p - 1 do
     Storage_layout.Codec.serialize_value b (key p i)
@@ -92,7 +89,6 @@ let serialize p =
 let deserialize page_no key_type data =
   let c = Cursor.create data in
   assert (Cursor.read_char c = internal_id);
-  let parent = Cursor.read_int64_le c |> Int64.to_int |> Btree_node.decode_parent in
   let num_keys = Cursor.read_int16_le c in
   let keys, children = create_storage key_type in
   for i = 0 to num_keys - 1 do
@@ -101,7 +97,7 @@ let deserialize page_no key_type data =
   for i = 0 to num_keys do
     children.(i) <- Cursor.read_int64_le c |> Int64.to_int
   done;
-  create page_no key_type parent (InternalData { keys; children; num_keys })
+  create page_no key_type (InternalData { keys; children; num_keys })
 ;;
 
 type insert_result =
@@ -190,7 +186,7 @@ let replace_key p k1 k2 =
   let pos = find_key_pos p k1 in
   assert (key p pos = k1);
   (keys p).(pos) <- k2;
-  Btree_node.set_dirty p
+  Generic_page.set_dirty p
 ;;
 
 type delete_result =

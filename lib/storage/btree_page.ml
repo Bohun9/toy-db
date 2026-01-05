@@ -29,29 +29,18 @@ let deserialize page_no sch key_attribute data =
 
 let page_no = function
   | HeaderPage p -> Generic_page.page_no p
-  | NodePage (InternalPage p) -> Btree_node.page_no p
-  | NodePage (LeafPage p) -> Btree_node.page_no p
-;;
-
-let parent = function
-  | InternalPage p -> Btree_node.parent p
-  | LeafPage p -> Btree_node.parent p
-;;
-
-let set_parent n parent =
-  match n with
-  | InternalPage p -> Btree_node.set_parent p (Some parent)
-  | LeafPage p -> Btree_node.set_parent p (Some parent)
+  | NodePage (InternalPage p) -> Generic_page.page_no p
+  | NodePage (LeafPage p) -> Generic_page.page_no p
 ;;
 
 let is_dirty = function
   | HeaderPage p -> Generic_page.is_dirty p
-  | NodePage (InternalPage p) -> Btree_node.is_dirty p
-  | NodePage (LeafPage p) -> Btree_node.is_dirty p
+  | NodePage (InternalPage p) -> Generic_page.is_dirty p
+  | NodePage (LeafPage p) -> Generic_page.is_dirty p
 ;;
 
 let clear_dirty = function
   | HeaderPage p -> Generic_page.clear_dirty p
-  | NodePage (InternalPage p) -> Btree_node.clear_dirty p
-  | NodePage (LeafPage p) -> Btree_node.clear_dirty p
+  | NodePage (InternalPage p) -> Generic_page.clear_dirty p
+  | NodePage (LeafPage p) -> Generic_page.clear_dirty p
 ;;
