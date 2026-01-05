@@ -33,8 +33,7 @@ let tuple p i = (tuples p).(i)
 let lowest_key p = key_of_tuple p (tuple p 0)
 
 let max_num_tuples_for_schema sch =
-  (Storage_layout.Page_io.page_size - (1 + 8 + 8 + 2))
-  / Storage_layout.Layout.tuple_storage_size sch
+  (Layout.page_size - (1 + 8 + 8 + 2)) / Layout.tuple_storage_size sch
 ;;
 
 let create_storage sch =
@@ -64,12 +63,12 @@ let decode_next_leaf p =
 ;;
 
 let serialize p =
-  let b = Buffer.create Storage_layout.Page_io.page_size in
+  let b = Buffer.create Layout.page_size in
   Buffer.add_char b leaf_id;
   Buffer.add_int64_le b (encode_next_leaf p |> Int64.of_int);
   Buffer.add_int16_le b (num_tuples p);
   for i = 0 to num_tuples p - 1 do
-    Storage_layout.Codec.serialize_tuple b (tuple p i)
+    Layout.serialize_tuple b (tuple p i)
   done;
   Buffer.to_bytes b
 ;;
@@ -81,7 +80,7 @@ let deserialize page_no sch key_attribute data =
   let num_tuples = Cursor.read_int16_le c in
   let tuples = create_storage sch in
   for i = 0 to num_tuples - 1 do
-    tuples.(i) <- Storage_layout.Codec.deserialize_tuple c sch page_no i
+    tuples.(i) <- Layout.deserialize_tuple c sch page_no i
   done;
   create page_no sch key_attribute (Some { tuples; num_tuples }) next_leaf
 ;;

@@ -12,9 +12,9 @@ let page_no = function
   | DataPage p -> Generic_page.page_no p
 ;;
 
-let is_dirty = function
-  | HeaderPage p -> Generic_page.is_dirty p
-  | DataPage p -> Generic_page.is_dirty p
+let dirty = function
+  | HeaderPage p -> Generic_page.dirty p
+  | DataPage p -> Generic_page.dirty p
 ;;
 
 let set_dirty = function

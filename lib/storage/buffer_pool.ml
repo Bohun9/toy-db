@@ -1,4 +1,5 @@
 module C = Core
+module Db_page = Page.Db_page
 
 type page_info =
   { page : Db_page.t
@@ -24,7 +25,7 @@ let flush_committed_changes bp tid =
   List.iter
     (fun page_key ->
        match Hashtbl.find_opt bp.cache page_key with
-       | Some { page; flush } when Db_page.is_dirty page -> flush page
+       | Some { page; flush } when Db_page.dirty page -> flush page
        | _ -> ())
     (Lock_manager.locked_pages_list bp.lock_manager tid)
 ;;
@@ -33,7 +34,7 @@ let discard_aborted_changes bp tid =
   List.iter
     (fun page_key ->
        match Hashtbl.find_opt bp.cache page_key with
-       | Some { page; _ } when Db_page.is_dirty page -> Hashtbl.remove bp.cache page_key
+       | Some { page; _ } when Db_page.dirty page -> Hashtbl.remove bp.cache page_key
        | _ -> ())
     (Lock_manager.locked_pages_list bp.lock_manager tid)
 ;;
@@ -62,8 +63,7 @@ let acquire_lock bp page tid perm =
 
 let evict bp =
   match
-    Hashtbl.to_seq bp.cache
-    |> Seq.find (fun (_, pinfo) -> not (Db_page.is_dirty pinfo.page))
+    Hashtbl.to_seq bp.cache |> Seq.find (fun (_, pinfo) -> not (Db_page.dirty pinfo.page))
   with
   | Some (k, _) -> Hashtbl.remove bp.cache k
   | None -> raise C.Error.buffer_pool_overflow
@@ -93,6 +93,6 @@ let discard_file_pages bp file =
 let unsafe_release_lock bp k tid =
   Mutex.protect bp.cache_mutex (fun () ->
     match Hashtbl.find_opt bp.cache k with
-    | Some pinfo when Db_page.is_dirty pinfo.page -> ()
+    | Some pinfo when Db_page.dirty pinfo.page -> ()
     | _ -> Lock_manager.unsafe_release_lock bp.lock_manager tid k)
 ;;

@@ -1,5 +1,9 @@
 module C = Core
 module M = Metadata
+module Heap_header_page = Page.Heap_header_page
+module Heap_data_page = Page.Heap_data_page
+module Heap_page = Page.Heap_page
+module Db_page = Page.Db_page
 
 type t =
   { file : string
@@ -12,19 +16,19 @@ let schema f = f.schema
 let page_key f page_no = { Page_key.file = f.file; page_no }
 
 let load_header_page f =
-  Storage_layout.Page_io.read_page f.file 0
+  Page_io.read_page f.file 0
   |> Heap_header_page.deserialize 0
   |> fun p -> Db_page.DB_HeapPage (Heap_page.HeaderPage p)
 ;;
 
 let load_data_page f page_no =
-  Storage_layout.Page_io.read_page f.file page_no
+  Page_io.read_page f.file page_no
   |> Heap_data_page.deserialize page_no f.schema
   |> fun p -> Db_page.DB_HeapPage (Heap_page.DataPage p)
 ;;
 
 let flush_heap_page f p =
-  Heap_page.serialize p |> Storage_layout.Page_io.write_page f.file (Heap_page.page_no p)
+  Heap_page.serialize p |> Page_io.write_page f.file (Heap_page.page_no p)
 ;;
 
 let flush_header_page f p = flush_heap_page f (Heap_page.HeaderPage p)
@@ -42,7 +46,7 @@ let initialize f =
 
 let create file schema buf_pool =
   let f = { file; schema; buf_pool } in
-  let num_pages = Storage_layout.Page_io.num_pages file in
+  let num_pages = Page_io.num_pages file in
   if num_pages = 0 then initialize f;
   f
 ;;
@@ -52,7 +56,7 @@ let get_page f page_no tid perm load flush =
     Buffer_pool.get_page f.buf_pool (page_key f page_no) tid perm load flush
   in
   match db_page with
-  | DB_HeapPage p -> p
+  | Db_page.DB_HeapPage p -> p
   | _ -> failwith "internal error"
 ;;
 

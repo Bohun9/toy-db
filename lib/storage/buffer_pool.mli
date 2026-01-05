@@ -9,9 +9,9 @@ val get_page
   -> Page_key.t
   -> Core.Transaction_id.t
   -> Perm.t
-  -> (unit -> Db_page.t)
-  -> (Db_page.t -> unit)
-  -> Db_page.t
+  -> (unit -> Page.Db_page.t)
+  -> (Page.Db_page.t -> unit)
+  -> Page.Db_page.t
 
 val discard_file_pages : t -> string -> unit
 val unsafe_release_lock : t -> Page_key.t -> Core.Transaction_id.t -> unit

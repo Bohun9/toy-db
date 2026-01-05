@@ -31,11 +31,7 @@ let free_slot (p : t) i =
 
 let has_empty_slot p = num_tuples p < num_slots p
 let page_header_size = 2
-
-let num_slots sch =
-  (Storage_layout.Page_io.page_size - page_header_size)
-  / Storage_layout.Layout.tuple_storage_size sch
-;;
+let num_slots sch = (Layout.page_size - page_header_size) / Layout.tuple_storage_size sch
 
 let create page_no sch =
   Generic_page.create page_no
@@ -43,9 +39,9 @@ let create page_no sch =
 ;;
 
 let serialize p =
-  let b = Buffer.create Storage_layout.Page_io.page_size in
+  let b = Buffer.create Layout.page_size in
   Buffer.add_int16_le b (num_tuples p);
-  Array.iter (Option.iter (Storage_layout.Codec.serialize_tuple b)) (slots p);
+  Array.iter (Option.iter (Layout.serialize_tuple b)) (slots p);
   Buffer.to_bytes b
 ;;
 
@@ -54,9 +50,7 @@ let deserialize page_no sch data =
   let num_tuples = Cursor.read_int16_le c in
   let slots =
     Array.init (num_slots sch) (fun i ->
-      if i < num_tuples
-      then Some (Storage_layout.Codec.deserialize_tuple c sch page_no i)
-      else None)
+      if i < num_tuples then Some (Layout.deserialize_tuple c sch page_no i) else None)
   in
   Generic_page.create page_no @@ { schema = sch; slots; num_tuples }
 ;;

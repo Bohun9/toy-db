@@ -4,10 +4,9 @@ module U = Test_utils
 module C = Core
 module M = Metadata
 module S = Storage
+module P = Page
 
-let jumbo_length =
-  (S.Storage_layout.Page_io.page_size - (1 + 8 + 8 + 2)) / (3 * C.Value.string_max_length)
-;;
+let jumbo_length = (P.Layout.page_size - (1 + 8 + 8 + 2)) / (3 * C.Value.string_max_length)
 
 let jumbo_schema =
   M.Table_schema.create
@@ -26,7 +25,7 @@ let jumbo_unbounded_interval = C.Value_interval.unbounded C.Type.String
 let sorted_jumbos n = List.init n jumbo_tuple |> List.sort C.Value.compare
 
 let test_jumbo_schema _ =
-  U.assert_int_eq 3 (S.Btree_leaf_page.max_num_tuples_for_schema jumbo_schema)
+  U.assert_int_eq 3 (P.Btree_leaf_page.max_num_tuples_for_schema jumbo_schema)
 ;;
 
 let with_btree f =

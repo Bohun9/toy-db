@@ -1,9 +1,13 @@
 module C = Core
 module M = Metadata
-module Page = Btree_page
-module Header = Btree_header_page
-module Internal = Btree_internal_page
-module Leaf = Btree_leaf_page
+module Header = Page.Btree_header_page
+module Internal = Page.Btree_internal_page
+module Leaf = Page.Btree_leaf_page
+module Node = Page.Btree_node
+module Btree_op = Page.Btree_op
+module Db_page = Page.Db_page
+module Generic_page = Page.Generic_page
+module Page = Page.Btree_page
 
 let log = C.Log.log
 
@@ -22,13 +26,13 @@ let page_key f page_no = { Page_key.file = f.file; page_no }
 let key_info f = List.nth (M.Table_schema.columns f.schema) f.key_attribute
 
 let flush_btree_page f p =
-  p |> Page.serialize |> Storage_layout.Page_io.write_page f.file (Page.page_no p);
+  p |> Page.serialize |> Page_io.write_page f.file (Page.page_no p);
   Page.clear_dirty p
 ;;
 
 let flush_header_page f p = flush_btree_page f (Page.HeaderPage p)
-let flush_internal_page f p = flush_btree_page f (Page.NodePage (Page.InternalPage p))
-let flush_leaf_page f p = flush_btree_page f (Page.NodePage (Page.LeafPage p))
+let flush_internal_page f p = flush_btree_page f (Page.NodePage (Node.InternalPage p))
+let flush_leaf_page f p = flush_btree_page f (Page.NodePage (Node.LeafPage p))
 
 let flush_page f = function
   | Db_page.DB_BTreePage p -> flush_btree_page f p
@@ -47,21 +51,21 @@ let initialize f key_attribute =
 ;;
 
 let create file schema buf_pool key_attribute =
-  let num_pages = Storage_layout.Page_io.num_pages file in
+  let num_pages = Page_io.num_pages file in
   let f = { file; schema; buf_pool; num_pages = Atomic.make num_pages; key_attribute } in
   if num_pages = 0 then initialize f key_attribute;
   f
 ;;
 
 let load_header_page f =
-  Storage_layout.Page_io.read_page f.file 0
+  Page_io.read_page f.file 0
   |> Header.deserialize 0
   |> fun p -> Db_page.DB_BTreePage (Page.HeaderPage p)
 ;;
 
 let load_node_page f page_no =
-  Storage_layout.Page_io.read_page f.file page_no
-  |> Page.deserialize page_no f.schema f.key_attribute
+  Page_io.read_page f.file page_no
+  |> Node.deserialize page_no f.schema f.key_attribute
   |> fun p -> Db_page.DB_BTreePage (Page.NodePage p)
 ;;
 
@@ -106,14 +110,14 @@ struct
   let get_leaf_page page_no perm =
     let p = get_node_page page_no perm in
     match p with
-    | Page.LeafPage p -> p
+    | Node.LeafPage p -> p
     | _ -> failwith ""
   ;;
 
   let get_internal_page page_no perm =
     let p = get_node_page page_no perm in
     match p with
-    | Page.InternalPage p -> p
+    | Node.InternalPage p -> p
     | _ -> failwith ""
   ;;
 
@@ -148,15 +152,15 @@ struct
     let rec search n path =
       let node = get_node_page n perm in
       let path =
-        if Page.safe node op
+        if Node.safe node op
         then (
           release_path_locks path;
           [])
         else path
       in
       match node with
-      | Page.LeafPage _ -> get_leaf_page n perm, path
-      | Page.InternalPage p -> search (Internal.find_child p k) (p :: path)
+      | Node.LeafPage _ -> get_leaf_page n perm, path
+      | Node.InternalPage p -> search (Internal.find_child p k) (p :: path)
     in
     search root []
   ;;
@@ -177,8 +181,8 @@ struct
 
   let node_page_no n = Page.page_no (Page.NodePage n)
   let is_root n = node_page_no n = get_root ()
-  let is_leaf_root leaf = is_root (Page.LeafPage leaf)
-  let is_internal_root internal = is_root (Page.InternalPage internal)
+  let is_leaf_root leaf = is_root (Node.LeafPage leaf)
+  let is_internal_root internal = is_root (Node.InternalPage internal)
 
   let create_internal_node create_data =
     let page_no = fresh_page_no Ctx.f in
@@ -202,7 +206,7 @@ struct
       | Internal.Split { sep_key; internal_data } ->
         log "btree internal split";
         let p2 = create_internal_node (InternalData internal_data) in
-        insert_in_parent (Page.InternalPage p1) sep_key (Generic_page.page_no p2) path)
+        insert_in_parent (Node.InternalPage p1) sep_key (Generic_page.page_no p2) path)
   ;;
 
   let insert_tuple t =
@@ -214,7 +218,7 @@ struct
       let new_leaf = create_leaf_node tuples_info (Leaf.next_leaf leaf) in
       Leaf.set_next_leaf leaf (Some (Generic_page.page_no new_leaf));
       insert_in_parent
-        (Page.LeafPage leaf)
+        (Node.LeafPage leaf)
         (Leaf.lowest_key new_leaf)
         (Generic_page.page_no new_leaf)
         path

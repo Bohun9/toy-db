@@ -39,8 +39,7 @@ type create_data =
   | InternalData of internal_data
 
 let max_num_keys_for_key key_type =
-  (Storage_layout.Page_io.page_size - (1 + 8 + 2) - 8)
-  / (Storage_layout.Layout.value_storage_size key_type + 8)
+  (Layout.page_size - (1 + 8 + 2) - 8) / (Layout.value_storage_size key_type + 8)
 ;;
 
 let create_storage key_type =
@@ -74,11 +73,11 @@ let find_key_pos p k = find_first_key p (C.Value.eval_le k)
 let find_child p k = child p (find_first_key p (C.Value.eval_lt k))
 
 let serialize p =
-  let b = Buffer.create Storage_layout.Page_io.page_size in
+  let b = Buffer.create Layout.page_size in
   Buffer.add_char b internal_id;
   Buffer.add_int16_le b (num_keys p);
   for i = 0 to num_keys p - 1 do
-    Storage_layout.Codec.serialize_value b (key p i)
+    Layout.serialize_value b (key p i)
   done;
   for i = 0 to num_children p - 1 do
     Buffer.add_int64_le b (child p i |> Int64.of_int)
@@ -92,7 +91,7 @@ let deserialize page_no key_type data =
   let num_keys = Cursor.read_int16_le c in
   let keys, children = create_storage key_type in
   for i = 0 to num_keys - 1 do
-    keys.(i) <- Storage_layout.Codec.deserialize_value c key_type
+    keys.(i) <- Layout.deserialize_value c key_type
   done;
   for i = 0 to num_keys do
     children.(i) <- Cursor.read_int64_le c |> Int64.to_int

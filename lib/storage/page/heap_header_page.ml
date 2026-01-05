@@ -11,7 +11,7 @@ let set_num_data_pages (p : t) v =
 let create page_no num_data_pages = Generic_page.create page_no { num_data_pages }
 
 let serialize p =
-  let b = Buffer.create Storage_layout.Page_io.page_size in
+  let b = Buffer.create Layout.page_size in
   Buffer.add_int64_le b (num_data_pages p |> Int64.of_int);
   Buffer.to_bytes b
 ;;

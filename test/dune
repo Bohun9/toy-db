@@ -11,7 +11,7 @@
 (test
  (name test_btree_file)
  (modules test_btree_file)
- (libraries ounit2 domainslib test_utils core storage))
+ (libraries ounit2 domainslib test_utils core storage page))
 
 (test
  (name test_catalog)
