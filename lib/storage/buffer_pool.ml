@@ -89,3 +89,10 @@ let discard_file_pages bp file =
       (fun (page_key : Page_key.t) p -> if file = page_key.file then None else Some p)
       bp.cache)
 ;;
+
+let unsafe_release_lock bp k tid =
+  Mutex.protect bp.cache_mutex (fun () ->
+    match Hashtbl.find_opt bp.cache k with
+    | Some pinfo when Db_page.is_dirty pinfo.page -> ()
+    | _ -> Lock_manager.unsafe_release_lock bp.lock_manager tid k)
+;;

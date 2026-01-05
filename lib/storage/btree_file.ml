@@ -127,14 +127,38 @@ struct
     Header.set_root p new_root
   ;;
 
-  let find_leaf k perm =
-    let root = get_root () in
-    let rec go n path =
-      match get_node_page n Perm.Read with
-      | Page.LeafPage _ -> get_leaf_page n perm, path
-      | Page.InternalPage p -> go (Internal.find_child p k) (p :: path)
+  let release_path_locks path =
+    List.iter
+      (fun p ->
+         Buffer_pool.unsafe_release_lock
+           Ctx.f.buf_pool
+           (page_key Ctx.f (Generic_page.page_no p))
+           Ctx.tid)
+      path
+  ;;
+
+  let find_leaf k op =
+    let perm =
+      match op with
+      | Btree_op.Read -> Perm.Read
+      | Btree_op.Insert -> Perm.Write
+      | Btree_op.Delete -> Perm.Write
     in
-    go root []
+    let root = get_root () in
+    let rec search n path =
+      let node = get_node_page n perm in
+      let path =
+        if Page.safe node op
+        then (
+          release_path_locks path;
+          [])
+        else path
+      in
+      match node with
+      | Page.LeafPage _ -> get_leaf_page n perm, path
+      | Page.InternalPage p -> search (Internal.find_child p k) (p :: path)
+    in
+    search root []
   ;;
 
   let create_leaf_node tuples_info next_leaf_page =
@@ -183,7 +207,7 @@ struct
 
   let insert_tuple t =
     let k = key_of_tuple t in
-    let leaf, path = find_leaf k Perm.Write in
+    let leaf, path = find_leaf k Btree_op.Insert in
     match Leaf.insert_tuple leaf t with
     | Leaf.Inserted -> ()
     | Leaf.Split tuples_info ->
@@ -261,7 +285,7 @@ struct
 
   let delete_tuple t =
     let k = key_of_tuple t in
-    let leaf, path = find_leaf k Perm.Write in
+    let leaf, path = find_leaf k Btree_op.Delete in
     match Leaf.delete_tuple leaf t (is_leaf_root leaf) with
     | Leaf.Deleted -> ()
     | Leaf.Underfull ->
@@ -289,7 +313,7 @@ struct
   ;;
 
   let range_scan interval =
-    let leaf, _ = find_leaf (C.Value_interval.left_endpoint interval) Perm.Read in
+    let leaf, _ = find_leaf (C.Value_interval.left_endpoint interval) Btree_op.Read in
     let rec scan_from_leaf leaf =
       Seq.append
         (Seq.filter

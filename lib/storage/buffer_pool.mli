@@ -14,3 +14,4 @@ val get_page
   -> Db_page.t
 
 val discard_file_pages : t -> string -> unit
+val unsafe_release_lock : t -> Page_key.t -> Core.Transaction_id.t -> unit

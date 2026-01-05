@@ -27,6 +27,11 @@ let deserialize page_no sch key_attribute data =
   | _ -> failwith "internal error"
 ;;
 
+let safe = function
+  | InternalPage p -> Btree_internal_page.safe p
+  | LeafPage p -> Btree_leaf_page.safe p
+;;
+
 let page_no = function
   | HeaderPage p -> Generic_page.page_no p
   | NodePage (InternalPage p) -> Generic_page.page_no p

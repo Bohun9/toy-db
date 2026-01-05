@@ -230,3 +230,9 @@ let delete_entry p k child_ is_root =
   then Underfull
   else Deleted
 ;;
+
+let safe p = function
+  | Btree_op.Read -> true
+  | Btree_op.Insert -> num_keys p < max_num_keys p
+  | Btree_op.Delete -> num_keys p > min_num_keys p
+;;

@@ -126,14 +126,20 @@ let rec acquire_lock lm page tid perm abort =
     acquire_lock lm page tid perm abort)
 ;;
 
+let release_lock lm tid page =
+  (match Hashtbl.find lm.page_locks page with
+   | Exclusive | Shared 1 -> Hashtbl.remove lm.page_locks page
+   | Shared num_trans -> Hashtbl.replace lm.page_locks page (Shared (num_trans - 1)));
+  Hashtbl.replace lm.tran_locks tid (PageKeySet.remove page (locked_pages lm tid))
+;;
+
 let release_locks lm tid =
-  let release_page_lock page =
-    match Hashtbl.find lm.page_locks page with
-    | Exclusive | Shared 1 -> Hashtbl.remove lm.page_locks page
-    | Shared num_trans -> Hashtbl.replace lm.page_locks page (Shared (num_trans - 1))
-  in
-  PageKeySet.iter release_page_lock (locked_pages lm tid);
+  PageKeySet.iter (release_lock lm tid) (locked_pages lm tid);
   Hashtbl.remove lm.tran_locks tid
+;;
+
+let unsafe_release_lock lm tid page =
+  Mutex.protect lm.mutex (fun () -> release_lock lm tid page)
 ;;
 
 let protect lm f = Mutex.protect lm.mutex f

@@ -168,3 +168,9 @@ let delete_tuple p t is_root =
 ;;
 
 let scan_page p = tuples p |> Array.to_seq |> Seq.take (num_tuples p)
+
+let safe p = function
+  | Btree_op.Read -> true
+  | Btree_op.Insert -> num_tuples p < max_num_tuples p
+  | Btree_op.Delete -> num_tuples p > min_num_tuples p
+;;
