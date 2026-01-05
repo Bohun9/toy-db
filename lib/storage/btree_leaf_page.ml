@@ -32,17 +32,25 @@ let key_of_tuple p t = C.Tuple.attribute t (key_attribute p)
 let tuple p i = (tuples p).(i)
 let lowest_key p = key_of_tuple p (tuple p 0)
 
+let max_num_tuples_for_schema sch =
+  (Storage_layout.Page_io.page_size - (1 + 8 + 8 + 2))
+  / Storage_layout.Layout.tuple_storage_size sch
+;;
+
+let create_storage sch =
+  Array.make (max_num_tuples_for_schema sch + 1) (C.Tuple.create [])
+;;
+
 type tuples_info =
   { tuples : C.Tuple.t Array.t
   ; num_tuples : int
   }
 
 let create page_no sch key_attribute parent tuples_info next_leaf =
-  let max_num_tuples = 2 in
   let tuples, num_tuples =
     match tuples_info with
     | Some { tuples; num_tuples } -> tuples, num_tuples
-    | None -> Array.make (max_num_tuples + 1) C.Tuple.{ attributes = []; rid = None }, 0
+    | None -> create_storage sch, 0
   in
   Btree_node.create parent
   @@ Generic_page.create page_no { key_attribute; tuples; num_tuples; next_leaf }
@@ -70,18 +78,17 @@ let serialize p =
   Buffer.to_bytes b
 ;;
 
-let deserialize page_no sch key_field data =
+let deserialize page_no sch key_attribute data =
   let c = Cursor.create data in
   assert (Cursor.read_char c = leaf_id);
   let parent = Cursor.read_int64_le c |> Int64.to_int |> Btree_node.decode_parent in
   let next_leaf = Cursor.read_int64_le c |> Int64.to_int |> decode_next_leaf in
   let num_tuples = Cursor.read_int16_le c in
-  let max_num_tuples = 2 in
-  let tuples = Array.make (max_num_tuples + 1) C.Tuple.{ attributes = []; rid = None } in
+  let tuples = create_storage sch in
   for i = 0 to num_tuples - 1 do
     tuples.(i) <- Storage_layout.Codec.deserialize_tuple c sch page_no i
   done;
-  create page_no sch key_field parent (Some { tuples; num_tuples }) next_leaf
+  create page_no sch key_attribute parent (Some { tuples; num_tuples }) next_leaf
 ;;
 
 type insert_result =

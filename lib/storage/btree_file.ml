@@ -175,7 +175,7 @@ struct
 
   let create_internal_node parent create_data =
     let page_no = fresh_page_no Ctx.f in
-    let new_internal = Internal.create page_no Ctx.f.schema parent create_data in
+    let new_internal = Internal.create page_no (key_info Ctx.f).typ parent create_data in
     update_parent_pointers (Internal.get_children new_internal) page_no;
     flush_internal_page Ctx.f new_internal;
     get_internal_page page_no Perm.Write

@@ -13,9 +13,9 @@ let test_persistence _ =
         let result = U.execute_stmt "SELECT * FROM numbers" cat tid in
         let tuples = List.of_seq result.rows in
         U.assert_int_eq 3 (List.length tuples);
-        U.assert_tuple_eq (U.make_counter_tuple 0) (List.nth tuples 0);
-        U.assert_tuple_eq (U.make_counter_tuple 1) (List.nth tuples 1);
-        U.assert_tuple_eq (U.make_counter_tuple 2) (List.nth tuples 2));
+        U.assert_tuple_eq (U.counter_tuple 0) (List.nth tuples 0);
+        U.assert_tuple_eq (U.counter_tuple 1) (List.nth tuples 1);
+        U.assert_tuple_eq (U.counter_tuple 2) (List.nth tuples 2));
       Catalog.delete_db_files cat))
 ;;
 

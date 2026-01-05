@@ -12,7 +12,7 @@ let rec shuffle = function
 ;;
 
 let counter_schema = M.Table_schema.create [ C.{ name = "counter"; typ = Type.Int } ] None
-let make_counter_tuple n = C.Tuple.create [ C.Value.Int n ]
+let counter_tuple n = C.Tuple.create [ C.Value.Int n ]
 let cmp_tuple t1 t2 = C.Tuple.attributes t1 = C.Tuple.attributes t2
 let assert_int_eq = OUnit2.assert_equal ~printer:string_of_int
 let assert_tuple_eq = OUnit2.assert_equal ~cmp:cmp_tuple ~printer:C.Tuple.show

@@ -38,19 +38,23 @@ type create_data =
       }
   | InternalData of internal_data
 
-let create_storage sch =
-  let max_num_keys = 2 in
-  let keys = Array.make (max_num_keys + 1) (C.Value.Int 0) in
+let max_num_keys_for_key key_type =
+  (Storage_layout.Page_io.page_size - (1 + 8 + 2) - 8)
+  / (Storage_layout.Layout.value_storage_size key_type + 8)
+;;
+
+let create_storage key_type =
+  let max_num_keys = max_num_keys_for_key key_type in
+  let keys = Array.make (max_num_keys + 1) (C.Value.minus_infty key_type) in
   let children = Array.make (max_num_keys + 2) 0 in
   keys, children
 ;;
 
-let create page_no sch parent create_data =
-  let max_num_keys = 2 in
+let create page_no key_type parent create_data =
   let data =
     match create_data with
     | RootData { child1; key; child2 } ->
-      let keys, children = create_storage sch in
+      let keys, children = create_storage key_type in
       keys.(0) <- key;
       children.(0) <- child1;
       children.(1) <- child2;
@@ -85,19 +89,19 @@ let serialize p =
   Buffer.to_bytes b
 ;;
 
-let deserialize page_no sch key_type data =
+let deserialize page_no key_type data =
   let c = Cursor.create data in
   assert (Cursor.read_char c = internal_id);
   let parent = Cursor.read_int64_le c |> Int64.to_int |> Btree_node.decode_parent in
   let num_keys = Cursor.read_int16_le c in
-  let keys, children = create_storage sch in
+  let keys, children = create_storage key_type in
   for i = 0 to num_keys - 1 do
     keys.(i) <- Storage_layout.Codec.deserialize_value c key_type
   done;
   for i = 0 to num_keys do
     children.(i) <- Cursor.read_int64_le c |> Int64.to_int
   done;
-  create page_no sch parent (InternalData { keys; children; num_keys })
+  create page_no key_type parent (InternalData { keys; children; num_keys })
 ;;
 
 type insert_result =
