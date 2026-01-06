@@ -2,15 +2,13 @@ module C = Core
 module M = Metadata
 
 type page_data =
-  { schema : M.Table_schema.t
-  ; slots : C.Tuple.t option array
+  { slots : C.Tuple.t option array
   ; mutable num_tuples : int
   }
 [@@deriving show]
 
 type t = page_data Generic_page.t
 
-let schema (p : t) = p.data.schema
 let slots (p : t) = p.data.slots
 let num_tuples (p : t) = p.data.num_tuples
 let num_slots p = Array.length (slots p)
@@ -35,7 +33,7 @@ let num_slots sch = (Layout.page_size - page_header_size) / Layout.tuple_storage
 
 let create page_no sch =
   Generic_page.create page_no
-  @@ { schema = sch; slots = Array.make (num_slots sch) None; num_tuples = 0 }
+  @@ { slots = Array.make (num_slots sch) None; num_tuples = 0 }
 ;;
 
 let serialize p =
@@ -52,7 +50,7 @@ let deserialize page_no sch data =
     Array.init (num_slots sch) (fun i ->
       if i < num_tuples then Some (Layout.deserialize_tuple c sch page_no i) else None)
   in
-  Generic_page.create page_no @@ { schema = sch; slots; num_tuples }
+  Generic_page.create page_no @@ { slots; num_tuples }
 ;;
 
 let insert_tuple p t =

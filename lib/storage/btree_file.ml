@@ -266,7 +266,7 @@ struct
         let left, right =
           if sibling.left then sibling.internal, internal else internal, sibling.internal
         in
-        let moved_children = Internal.coalesce left sibling.sep_key right in
+        Internal.coalesce left sibling.sep_key right;
         delete_entry parent sibling.sep_key (Generic_page.page_no right) path)
       else (
         let borrowed_key =

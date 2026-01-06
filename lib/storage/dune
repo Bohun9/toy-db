@@ -2,6 +2,4 @@
  (name storage)
  (preprocess
   (pps ppx_deriving.show))
- (libraries ocamlgraph unix core metadata page)
- (flags
-  (:standard -w -26-27-32-37-69)))
+ (libraries ocamlgraph unix core metadata page))

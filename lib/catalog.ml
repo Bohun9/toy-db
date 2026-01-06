@@ -57,6 +57,7 @@ let begin_new_transaction cat =
 ;;
 
 let commit_transaction cat tid = S.Buffer_pool.commit_transaction cat.buf_pool tid
+let abort_transaction cat tid = S.Buffer_pool.abort_transaction cat.buf_pool tid
 
 let with_tid cat f =
   let tid = begin_new_transaction cat in

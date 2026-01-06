@@ -3,6 +3,7 @@ type t
 val create : int -> Lock_manager.t -> t
 val begin_transaction : t -> Core.Transaction_id.t -> unit
 val commit_transaction : t -> Core.Transaction_id.t -> unit
+val abort_transaction : t -> Core.Transaction_id.t -> unit
 
 val get_page
   :  t

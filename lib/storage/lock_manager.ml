@@ -58,7 +58,7 @@ let try_acquire lm page tid perm =
     when num_trans = 1 && PageKeySet.mem page locked_pages ->
     Hashtbl.replace lm.page_locks page Exclusive;
     true
-  | Some (Shared num_trans), Perm.Write -> false
+  | Some (Shared _), Perm.Write -> false
 ;;
 
 let get_blocked_trans lm page =
@@ -67,7 +67,7 @@ let get_blocked_trans lm page =
   | None -> TransactionIdSet.empty
 ;;
 
-let check_deadlock lm page tid =
+let check_deadlock lm =
   let g = TransactionIdGraph.create () in
   Hashtbl.iter
     (fun t1 locked_pages ->
@@ -81,7 +81,7 @@ let check_deadlock lm page tid =
                      g
                      (TransactionIdGraph.V.create t2)
                      (TransactionIdGraph.V.create t1))
-              (get_blocked_trans lm page))
+              (get_blocked_trans lm locked_page))
          locked_pages)
     lm.tran_locks;
   let num_comps, _ = TransactionIdGraphSCC.scc g in
@@ -92,7 +92,7 @@ let check_deadlock lm page tid =
 let block_tran lm page tid =
   let blocked_trans = get_blocked_trans lm page in
   Hashtbl.replace lm.blocked_trans page (TransactionIdSet.add tid blocked_trans);
-  if check_deadlock lm page tid
+  if check_deadlock lm
   then true
   else (
     Hashtbl.replace lm.blocked_trans page blocked_trans;
