@@ -192,7 +192,7 @@ and build_plan reg logical_plan =
     limit_pp
   | L.InsertValues { file; tuples } ->
     make_pp
-      Tuple_desc.dummy
+      [ Attribute.virtual_attr "inserted_count" C.Type.Int ]
       (Insert
          { child =
              make_pp
@@ -202,7 +202,8 @@ and build_plan reg logical_plan =
          })
   | L.Delete { file; fields; predicates } ->
     let child = build_plan_table file fields predicates in
-    make_pp child.desc @@ Delete { child; file = M.Db_file.to_table_file file }
+    make_pp [ Attribute.virtual_attr "deleted_count" C.Type.Int ]
+    @@ Delete { child; file = M.Db_file.to_table_file file }
 ;;
 
 let eval_exprs es t = List.map (fun e -> Expr.eval e t) es
@@ -217,13 +218,29 @@ let rec execute_plan' tid pp =
     M.range_scan f interval tid
   | Const { tuples } -> List.to_seq tuples
   | Insert { child; file = M.Db_file.PackedTable (m, f) } ->
-    let module M = (val m) in
-    Seq.iter (fun t -> M.insert_tuple f t tid) (execute_plan tid child);
-    Seq.empty
+    fun () ->
+      let module M = (val m) in
+      let count =
+        Seq.fold_left
+          (fun acc t ->
+             M.insert_tuple f t tid;
+             acc + 1)
+          0
+          (execute_plan tid child)
+      in
+      Seq.return (C.Tuple.create [ C.Value.Int count ]) ()
   | Delete { child; file = M.Db_file.PackedTable (m, f) } ->
-    let module M = (val m) in
-    execute_plan tid child |> List.of_seq |> List.iter (fun t -> M.delete_tuple f t tid);
-    Seq.empty
+    fun () ->
+      let module M = (val m) in
+      let count =
+        Seq.fold_left
+          (fun acc t ->
+             M.delete_tuple f t tid;
+             acc + 1)
+          0
+          (execute_plan tid child)
+      in
+      Seq.return (C.Tuple.create [ C.Value.Int count ]) ()
   | Project { child; exprs } ->
     Seq.map
       (fun t -> C.Tuple.{ attributes = eval_exprs exprs t; rid = None })

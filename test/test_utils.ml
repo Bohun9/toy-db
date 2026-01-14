@@ -74,7 +74,7 @@ let execute_ddl sql cat tid =
 
 let execute_dml sql cat tid =
   match Catalog.execute_sql sql cat tid with
-  | Catalog.Rows _ -> ()
+  | Catalog.Rows { rows; _ } -> Seq.iter ignore rows
   | Catalog.NoResult -> OUnit2.assert_failure "expected rows but got no result"
 ;;
 
