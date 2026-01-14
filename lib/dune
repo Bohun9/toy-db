@@ -10,6 +10,4 @@
   sql_parser
   logical_plan
   physical_plan
-  storage)
- (flags
-  (:standard -w -26-27-32-37-69)))
+  storage))
